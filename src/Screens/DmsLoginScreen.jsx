@@ -12,7 +12,9 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from 'react-native';
+import { loginUser } from '../Api/ApiService';
 
 // ─── Colors ───────────────────────────────────────────────────────────────────
 
@@ -84,13 +86,9 @@ const CommonWidths = {
   width20: 20,
   width24: 24,
   width30: 30,
+  width36: 36,
   width40: 40,
 };
-
-// ─── Valid Credentials ────────────────────────────────────────────────────────
-
-const VALID_USERNAME = 'trial';
-const VALID_PASSWORD = 'trial';
 
 // ─── Button States ────────────────────────────────────────────────────────────
 
@@ -157,25 +155,61 @@ const DmsLoginScreen = ({ navigation }) => {
 
   const handleSignIn = async () => {
     setGlobalError(false);
+
+    // ── Step 1: Validate fields ──────────────────────────────────────
     const uErr = validateUsername(username);
     const pErr = validatePassword(password);
     setUsernameError(uErr || '');
     setPasswordError(pErr || '');
-    if (uErr || pErr) return;
 
+    if (uErr || pErr) {
+      Alert.alert(
+        '⚠️ Missing Information',
+        uErr || pErr,
+        [{ text: 'OK', style: 'default' }]
+      );
+      return;
+    }
+
+    // ── Step 2: Call real login API ──────────────────────────────────
     setBtnState(BTN_LOADING);
-    await new Promise(resolve => setTimeout(resolve, 1500));
 
-    if (
-      username.trim().toLowerCase() === VALID_USERNAME &&
-      password === VALID_PASSWORD
-    ) {
+    const result = await loginUser(username.trim(), password);
+
+    if (result.success) {
+      // ── Success ─────────────────────────────────────────────────
       setBtnState(BTN_SUCCESS);
-      await new Promise(resolve => setTimeout(resolve, 800));
-      navigation.replace('DashboardScreen');
+      Alert.alert(
+        '✅ Login Successful',
+        `Welcome back!\nRedirecting to Dashboard...`,
+        [
+          {
+            text: 'Continue',
+            onPress: () => navigation.replace('DashboardScreen'),
+          },
+        ],
+        { cancelable: false }
+      );
+
     } else {
+      // ── Error ────────────────────────────────────────────────────
       setBtnState(BTN_IDLE);
       setGlobalError(true);
+      Alert.alert(
+        '❌ Login Failed',
+        result.message || 'Invalid username or password. Please try again.',
+        [
+          {
+            text: 'Try Again',
+            style: 'destructive',
+            onPress: () => {
+              setPassword('');
+              setGlobalError(false);
+            },
+          },
+          { text: 'Cancel', style: 'cancel' },
+        ]
+      );
     }
   };
 
@@ -189,7 +223,7 @@ const DmsLoginScreen = ({ navigation }) => {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: 40 }]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
@@ -213,8 +247,6 @@ const DmsLoginScreen = ({ navigation }) => {
                 <Text style={styles.appSubtitle}>ENTERPRISE PLATFORM</Text>
               </View>
             </View>
-
-          
           </View>
 
           {/* ── FORM CARD ────────────────────────────────────────────── */}
@@ -231,8 +263,7 @@ const DmsLoginScreen = ({ navigation }) => {
                   <Text style={styles.errorBannerDotText}>!</Text>
                 </View>
                 <Text style={styles.errorBannerMsg}>
-                  Invalid username or password. Try{'  '}
-                  <Text style={styles.errorBannerBold}>trial / trial</Text>
+                  Invalid username or password. Please check your credentials.
                 </Text>
               </View>
             ) : null}
@@ -254,7 +285,7 @@ const DmsLoginScreen = ({ navigation }) => {
               />
               <TextInput
                 style={styles.input}
-                placeholder="Enter username (trial)"
+                placeholder="Enter username"
                 placeholderTextColor={Colors.inputIcon}
                 value={username}
                 onChangeText={handleUsernameChange}
@@ -289,7 +320,7 @@ const DmsLoginScreen = ({ navigation }) => {
               />
               <TextInput
                 style={styles.input}
-                placeholder="Enter password (trial)"
+                placeholder="Enter password"
                 placeholderTextColor={Colors.inputIcon}
                 value={password}
                 onChangeText={handlePasswordChange}
@@ -309,11 +340,7 @@ const DmsLoginScreen = ({ navigation }) => {
                 disabled={isLoading || isSuccess}
               >
                 <Image
-                  source={
-                    showPassword
-                      ? require('../Assets/icons/eyes.png')
-                      : require('../Assets/icons/eyes.png')
-                  }
+                  source={require('../Assets/icons/eyes.png')}
                   style={styles.eyeIcon}
                   resizeMode="contain"
                 />
@@ -341,7 +368,6 @@ const DmsLoginScreen = ({ navigation }) => {
                   backgroundColor: isSuccess
                     ? Colors.btn_success_bg
                     : Colors.btn_dark_bg,
-                  opacity: (!isFormValid && !isLoading && !isSuccess) ? 1 : 1,
                 },
               ]}
               onPress={handleSignIn}
@@ -355,12 +381,11 @@ const DmsLoginScreen = ({ navigation }) => {
                 </>
               ) : isSuccess ? (
                 <>
-                   <Image
+                  <Image
                     source={require('../Assets/icons/check.png')}
                     style={styles.access}
                     resizeMode="contain"
                   />
-
                   <Text style={styles.signInText}>Access Granted</Text>
                 </>
               ) : (
@@ -375,7 +400,7 @@ const DmsLoginScreen = ({ navigation }) => {
               )}
             </TouchableOpacity>
 
-           
+            
 
           </View>
 
@@ -406,7 +431,6 @@ const styles = StyleSheet.create({
     paddingTop: CommonHeights.height8,
     overflow: 'hidden',
     marginTop: 15,
-
   },
 
   circle1: {
@@ -435,11 +459,13 @@ const styles = StyleSheet.create({
   },
 
   accentLine: {
-    width: CommonWidths.width30,
+    width: CommonWidths.width36,
     height: 3,
     backgroundColor: Colors.primary,
     borderRadius: 2,
-    marginBottom: CommonHeights.height20,
+    marginTop: CommonHeights.height16,
+    
+    
   },
 
   appIdentity: {
@@ -475,27 +501,6 @@ const styles = StyleSheet.create({
     fontSize: CommonFonts.font11,
     letterSpacing: 1,
     marginTop: 2,
-  },
-
-  headlineWhite: {
-    color: Colors.text_white,
-    fontSize: CommonFonts.font28,
-    fontWeight: 'bold',
-    lineHeight: 36,
-  },
-
-  headlineGold: {
-    color: Colors.primary,
-    fontSize: CommonFonts.font28,
-    fontWeight: 'bold',
-    lineHeight: 36,
-    marginBottom: CommonHeights.height10,
-  },
-
-  headerDesc: {
-    color: Colors.text_grey,
-    fontSize: CommonFonts.font13,
-    lineHeight: 20,
   },
 
   // ── Form Card ──────────────────────────────────────────────────────────
@@ -570,11 +575,6 @@ const styles = StyleSheet.create({
     color: Colors.error,
     fontSize: CommonFonts.font13,
     lineHeight: 18,
-  },
-
-  errorBannerBold: {
-    fontWeight: 'bold',
-    color: Colors.error,
   },
 
   // ── Fields ────────────────────────────────────────────────────────────
@@ -659,11 +659,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: CommonWidths.width10,
     marginBottom: CommonHeights.height26,
-   
   },
 
-  access:{
-     width:     22,
+  access: {
+    width:     22,
     height:    22,
     tintColor: Colors.text_white,
   },
@@ -671,59 +670,12 @@ const styles = StyleSheet.create({
   signInIcon: {
     width: CommonWidths.width16,
     height: CommonHeights.height18,
-    
-  },
-
-  signInCheckmark: {
-    color: Colors.text_white,
-    fontSize: CommonFonts.font16,
-    fontWeight: 'bold',
   },
 
   signInText: {
     color: Colors.text_white,
     fontSize: CommonFonts.font16,
     fontWeight: 'bold',
-  },
-
-  // ── Footer ────────────────────────────────────────────────────────────
-
-  dividerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: CommonWidths.width8,
-    marginBottom: CommonHeights.height14,
-  },
-
-  dividerLine: {
-    flex: 1,
-    height: 0.5,
-    backgroundColor: Colors.divider,
-  },
-
-  dividerLabel: {
-    color: Colors.badge_text,
-    fontSize: CommonFonts.font12,
-    letterSpacing: 1,
-    fontWeight: '600',
-  },
-
-  badgeRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: CommonHeights.height18,
-  },
-
-  badge: {
-    color: Colors.text_grey,
-    fontSize: CommonFonts.font11,
-    marginTop: 7,
-  },
-
-  versionText: {
-    textAlign: 'center',
-    color: Colors.badge_text,
-    fontSize: CommonFonts.font10,
   },
 
 });

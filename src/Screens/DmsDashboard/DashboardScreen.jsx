@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,13 @@ import {
   ScrollView,
   Platform,
   Modal,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
+import {
+  getDashboardTotals,
+  getEnquiries,
+} from '../../Api/ApiService';
 
 // ─── Colors ───────────────────────────────────────────────────────────────────
 
@@ -48,58 +54,27 @@ const Colors = {
 // ─── Fonts ────────────────────────────────────────────────────────────────────
 
 const CommonFonts = {
-  font10: 10,
-  font11: 11,
-  font12: 12,
-  font13: 13,
-  font14: 14,
-  font15: 15,
-  font16: 16,
-  font18: 18,
-  font20: 20,
-  font22: 22,
-  font28: 28,
-  font32: 32,
+  font10: 10, font11: 11, font12: 12, font13: 13,
+  font14: 14, font15: 15, font16: 16, font18: 18,
+  font20: 20, font22: 22, font28: 28, font32: 32,
 };
 
 // ─── Heights ──────────────────────────────────────────────────────────────────
 
 const CommonHeights = {
-  height: 3,
-  height6: 6,
-  height8:  8,
-  height10: 10,
-  height12: 12,
-  height14: 14,
-  height16: 16,
-  height18: 18,
-  height20: 20,
-  height22: 22,
-  height24: 24,
-  height26: 26,
-  height28: 28,
-  height30: 30,
-  height40: 40,
-  height48: 48,
-  height52: 52,
-  height56: 56,
-  height60: 60,
-  height64: 64,
+  height:   3,  height6:  6,  height8:  8,  height10: 10,
+  height12: 12, height14: 14, height16: 16, height18: 18,
+  height20: 20, height22: 22, height24: 24, height26: 26,
+  height28: 28, height30: 30, height40: 40, height48: 48,
+  height52: 52, height56: 56, height60: 60, height64: 64,
 };
 
 // ─── Widths ───────────────────────────────────────────────────────────────────
 
 const CommonWidths = {
-  width8:  8,
-  width10: 10,
-  width12: 12,
-  width16: 16,
-  width20: 20,
-  width24: 24,
-  width30: 30,
-  width40: 40,
-  width44: 44,
-  width48: 48,
+  width8:  8,  width10: 10, width12: 12, width16: 16,
+  width20: 20, width24: 24, width30: 30, width40: 40,
+  width44: 44, width48: 48,
 };
 
 // ─── Nav Tab Config ───────────────────────────────────────────────────────────
@@ -112,63 +87,45 @@ const NAV_TABS = [
   { key: 'Logout',  label: 'Logout',  icon: require('../../Assets/icons/logout2.png') },
 ];
 
-// ─── Overview Card Data ───────────────────────────────────────────────────────
-
-const OVERVIEW_CARDS = [
-  {
-    key: 'members',
-    value: '248',
-    label: 'MEMBERS',
-    growth: '↑ 12%',
-    icon: require('../../Assets/icons/members.png'),
-    iconBg: Colors.gold_icon_bg,
-    iconTint: Colors.bg_dark,
-  },
-  {
-    key: 'enquiry',
-    value: '36',
-    label: 'NEW ENQ.',
-    growth: '↑ 8%',
-    icon: require('../../Assets/icons/sub.png'),
-    iconBg: Colors.green_icon_bg,
-    iconTint: '#16A34A',
-  },
-  {
-    key: 'revenue',
-    value: '₹1.8L',
-    label: 'REVENUE',
-    growth: '↑ 21%',
-    icon: require('../../Assets/icons/reports2.png'),
-    iconBg: Colors.blue_icon_bg,
-    iconTint: '#3B82F6',
-  },
-];
-
 // ─── Quick Action Data ────────────────────────────────────────────────────────
 
 const QUICK_ACTIONS = [
   {
-    key: 'new_enquiry',
-    label: 'New Enquiry',
-    icon: require('../../Assets/icons/plus2.png'),
-    iconBg: Colors.bg_dark,
-    iconTint: Colors.text_white,
-    isPlus: true,
+    key:      'New Booking',
+    label:    'New Booking',
+    icon:     require('../../Assets/icons/sub.png'),
+    iconBg:   Colors.green_icon_bg,
+    iconTint: '#16A34A',
+    isPlus:   false,
   },
   {
-    key: 'subscription',
-    label: 'Subscription',
-    icon: require('../../Assets/icons/sub.png'),
-    iconBg: Colors.green_icon_bg,
-    iconTint: '#16A34A',
+    key:      'new_enquiry',
+    label:    'New Enquiry',
+    icon:     require('../../Assets/icons/plus2.png'),
+    iconBg:   Colors.bg_dark,
+    iconTint: Colors.text_white,
+    isPlus:   true,
+  },
+  {
+    key:      'reports',
+    label:    'Reports',
+    icon:     require('../../Assets/icons/reports2.png'),
+    iconBg:   Colors.blue_icon_bg,
+    iconTint: '#3B82F6',
+    isPlus:   false,
+  },
+  {
+    key:    'Expenses',
+    label:  'Expenses',
+    icon:   require('../../Assets/icons/expenses.png'),
+    iconBg: Colors.blue_icon_bg,
     isPlus: false,
   },
   {
-    key: 'reports',
-    label: 'Reports',
-    icon: require('../../Assets/icons/reports2.png'),
+    key:    'Check-In Details',
+    label:  'Check-In Details',
+    icon:   require('../../Assets/icons/checkin.png'),
     iconBg: Colors.blue_icon_bg,
-    iconTint: '#3B82F6',
     isPlus: false,
   },
 ];
@@ -177,39 +134,348 @@ const QUICK_ACTIONS = [
 
 const PERIOD_OPTIONS = ['Today', 'Yesterday', 'This Month', 'This Year', 'Custom'];
 
+// ─── Period → API FilterType mapping ─────────────────────────────────────────
+
+const PERIOD_MAP = {
+  'Today':      'Today',
+  'Yesterday':  'Yesterday',
+  'This Month': 'ThisMonth',
+  'This Year':  'ThisYear',
+  'Custom':     'Custom',
+};
+
+// ─── Helper: safely format INR ────────────────────────────────────────────────
+
+const formatINR = (val) =>
+  `₹${Number(val || 0).toLocaleString('en-IN')}`;
+
+// ─── Calendar Constants ───────────────────────────────────────────────────────
+
+const DAYS_SHORT  = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+const MONTHS_LONG = [
+  'January','February','March','April','May','June',
+  'July','August','September','October','November','December',
+];
+
+// ─── CalendarPicker ───────────────────────────────────────────────────────────
+// ✅ OUTSIDE DashboardScreen — component se PEHLE
+
+const CalendarPicker = ({ visible, selectedDate, onSelect, onClear, onClose }) => {
+  const today = new Date();
+  const [viewYear,  setViewYear]  = useState(today.getFullYear());
+  const [viewMonth, setViewMonth] = useState(today.getMonth());
+
+  const parseDate = (str) => {
+    const [dd, mm, yyyy] = str.split('/');
+    return new Date(Number(yyyy), Number(mm) - 1, Number(dd));
+  };
+
+  const goMonth = (delta) => {
+    let m = viewMonth + delta, y = viewYear;
+    if (m > 11) { m = 0; y++; }
+    if (m <  0) { m = 11; y--; }
+    setViewMonth(m);
+    setViewYear(y);
+  };
+
+  const buildGrid = () => {
+    const firstWeekday = new Date(viewYear, viewMonth, 1).getDay();
+    const daysInMonth  = new Date(viewYear, viewMonth + 1, 0).getDate();
+    const daysInPrev   = new Date(viewYear, viewMonth, 0).getDate();
+    const cells = [];
+    for (let i = firstWeekday - 1; i >= 0; i--)
+      cells.push({ day: daysInPrev - i, cur: false });
+    for (let d = 1; d <= daysInMonth; d++)
+      cells.push({ day: d, cur: true });
+    while (cells.length % 7 !== 0 || cells.length < 35)
+      cells.push({ day: cells.length - daysInMonth - firstWeekday + 1, cur: false });
+    return cells;
+  };
+
+  const cells = buildGrid();
+
+  const isSelected = (cell) => {
+    if (!cell.cur || !selectedDate) return false;
+    const s = parseDate(selectedDate);
+    return (
+      s.getDate()     === cell.day &&
+      s.getMonth()    === viewMonth &&
+      s.getFullYear() === viewYear
+    );
+  };
+
+  const isToday = (cell) => {
+    if (!cell.cur) return false;
+    return (
+      cell.day    === today.getDate() &&
+      viewMonth   === today.getMonth() &&
+      viewYear    === today.getFullYear()
+    );
+  };
+
+  const handleSelect = (cell) => {
+    if (!cell.cur) return;
+    const picked = new Date(viewYear, viewMonth, cell.day);
+    const dd = String(picked.getDate()).padStart(2, '0');
+    const mm = String(picked.getMonth() + 1).padStart(2, '0');
+    onSelect(`${dd}/${mm}/${picked.getFullYear()}`);
+    onClose();
+  };
+
+  const handleToday = () => {
+    const dd = String(today.getDate()).padStart(2, '0');
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    onSelect(`${dd}/${mm}/${today.getFullYear()}`);
+    onClose();
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <TouchableOpacity style={calStyles.backdrop} activeOpacity={1} onPress={onClose} />
+      <View style={calStyles.card}>
+
+        {/* Month / Year header */}
+        <View style={calStyles.headerRow}>
+          <TouchableOpacity style={calStyles.monthBtn} activeOpacity={0.7}>
+            <Text style={calStyles.monthText}>{MONTHS_LONG[viewMonth]} {viewYear}</Text>
+            <Text style={calStyles.monthArrow}>▾</Text>
+          </TouchableOpacity>
+          <View style={calStyles.navBtns}>
+            <TouchableOpacity style={calStyles.navBtn} onPress={() => goMonth(-1)} activeOpacity={0.7}>
+              <Text style={calStyles.navArrow}>↑</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={calStyles.navBtn} onPress={() => goMonth(1)} activeOpacity={0.7}>
+              <Text style={calStyles.navArrow}>↓</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Day labels */}
+        <View style={calStyles.dayLabelRow}>
+          {DAYS_SHORT.map((d, i) => (
+            <Text key={i} style={calStyles.dayLabel}>{d}</Text>
+          ))}
+        </View>
+
+        {/* Grid */}
+        <View style={calStyles.grid}>
+          {cells.map((cell, i) => {
+            const sel = isSelected(cell);
+            const tod = isToday(cell) && !sel;
+            return (
+              <TouchableOpacity
+                key={i}
+                style={[calStyles.cell, sel && calStyles.cellSelected]}
+                onPress={() => handleSelect(cell)}
+                activeOpacity={cell.cur ? 0.7 : 1}
+              >
+                <Text style={[
+                  calStyles.cellText,
+                  !cell.cur && calStyles.cellTextOther,
+                  tod        && calStyles.cellTextToday,
+                  sel        && calStyles.cellTextSel,
+                ]}>
+                  {cell.day}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {/* Footer */}
+        <View style={calStyles.footer}>
+          <TouchableOpacity onPress={() => { onClear(); onClose(); }} activeOpacity={0.7}>
+            <Text style={calStyles.footerClear}>Clear</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleToday} activeOpacity={0.7}>
+            <Text style={calStyles.footerToday}>Today</Text>
+          </TouchableOpacity>
+        </View>
+
+      </View>
+    </Modal>
+  );
+};
+
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 const DashboardScreen = ({ navigation }) => {
-  const [activeTab, setActiveTab]           = useState('Home');
-  const [ddOpen, setDdOpen]                 = useState(false);
-  const [selectedPeriod, setSelectedPeriod] = useState('This Month');
-  const [dropdownLayout, setDropdownLayout] = useState({ x: 0, y: 0, width: 0 });
+
+  // ── UI State ──────────────────────────────────────────────────────────────
+  const [activeTab,           setActiveTab]           = useState('Home');
+  const [ddOpen,              setDdOpen]              = useState(false);
+  const [selectedPeriod,      setSelectedPeriod]      = useState('This Month');
+  const [dropdownLayout,      setDropdownLayout]      = useState({ x: 0, y: 0, width: 0 });
+  const [refreshing,          setRefreshing]          = useState(false);
+
+  // ── Custom Date State ─────────────────────────────────────────────────────
+  const [customModalVisible,  setCustomModalVisible]  = useState(false);
+  const [customFrom,          setCustomFrom]          = useState('');
+  const [customTo,            setCustomTo]            = useState('');
+  const [calFromOpen,         setCalFromOpen]         = useState(false);
+  const [calToOpen,           setCalToOpen]           = useState(false);
+
+  // ── API State ─────────────────────────────────────────────────────────────
+  const [dashboardData,       setDashboardData]       = useState(null);
+  const [loading,             setLoading]             = useState(false);
+  const [totalEnquiries,      setTotalEnquiries]      = useState(0);
+
+  // ── Fetch Dashboard ───────────────────────────────────────────────────────
+
+  const fetchDashboardData = useCallback(async (fromDate = '', toDate = '') => {
+    try {
+      setLoading(true);
+
+      const filterType = PERIOD_MAP[selectedPeriod] ?? 'Today';
+      const result     = await getDashboardTotals(filterType, fromDate, toDate);
+
+      console.log('📦 FULL API RESULT =>', JSON.stringify(result));
+
+      if (!result?.success) {
+        console.warn('⚠️ API success=false:', result);
+        setDashboardData({});
+        return;
+      }
+
+      let rawData = result?.data?.data ?? result?.data ?? null;
+      let parsedArray = [];
+
+      if (typeof rawData === 'string') {
+        try { parsedArray = JSON.parse(rawData); } catch { parsedArray = []; }
+      } else if (Array.isArray(rawData)) {
+        parsedArray = rawData;
+      } else if (rawData && typeof rawData === 'object') {
+        parsedArray = [rawData];
+      }
+
+      const firstItem = parsedArray[0] || {};
+      console.log('✅ DASHBOARD ITEM =>', JSON.stringify(firstItem));
+      console.log('🔑 AVAILABLE KEYS =>', Object.keys(firstItem));
+      setDashboardData(firstItem);
+
+    } catch (error) {
+      console.error('❌ FETCH ERROR =>', error);
+      setDashboardData({});
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedPeriod]);
+
+  // ── Fetch Enquiries Count ─────────────────────────────────────────────────
+
+  const fetchEnquiriesCount = useCallback(async () => {
+    try {
+      const result = await getEnquiries();
+      if (result.success) {
+        setTotalEnquiries(result.data.length);
+        console.log('✅ TOTAL ENQUIRIES =>', result.data.length);
+      }
+    } catch (error) {
+      console.log('❌ ENQUIRY ERROR =>', error);
+    }
+  }, []);
+
+  // ── Pull-to-Refresh ───────────────────────────────────────────────────────
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await Promise.all([fetchDashboardData(), fetchEnquiriesCount()]);
+    setRefreshing(false);
+  }, [fetchDashboardData, fetchEnquiriesCount]);
+
+  // ── Period change → refetch ───────────────────────────────────────────────
+
+  useEffect(() => {
+    fetchDashboardData();
+    fetchEnquiriesCount();
+  }, [fetchDashboardData, fetchEnquiriesCount]);
+
+  // ── Overview Cards ────────────────────────────────────────────────────────
+
+  const OVERVIEW_CARDS = useMemo(() => [
+    {
+      key:        'revenue',
+      value:      formatINR(dashboardData?.TotalNewBookingAmount),
+      label:      'REVENUE',
+      growth:     '↑ 21%',
+      icon:       require('../../Assets/icons/reports2.png'),
+      iconBg:     Colors.blue_icon_bg,
+      iconTint:   '#3B82F6',
+      navigateTo: 'TotalRevnueScreen',
+    },
+    {
+      key:        'expenses',
+      value:      formatINR(dashboardData?.TotalExpenseAmount),
+      label:      'TOTAL EXP.',
+      growth:     '↑ 8%',
+      icon:       require('../../Assets/icons/expenses.png'),
+      iconBg:     Colors.blue_icon_bg,
+      iconTint:   '#3B82F6',
+      navigateTo: 'TotalExpensesScreen',
+    },
+    {
+      key:        'enquiry',
+      value:      String(totalEnquiries),
+      label:      'NEW ENQ.',
+      growth:     '↑ 8%',
+      icon:       require('../../Assets/icons/sub.png'),
+      iconBg:     Colors.green_icon_bg,
+      iconTint:   '#16A34A',
+      navigateTo: 'TotalEnquiryScreen',
+    },
+  ], [dashboardData, totalEnquiries]);
+
+  // ── Handlers ──────────────────────────────────────────────────────────────
 
   const handlePeriodSelect = (item) => {
     setSelectedPeriod(item);
     setDdOpen(false);
+    if (item === 'Custom') {
+      // Reset dates and open custom modal
+      setCustomFrom('');
+      setCustomTo('');
+      setCustomModalVisible(true);
+    }
+  };
+
+  const handleApplyCustom = () => {
+    setCustomModalVisible(false);
+    const toApi = (str) => {
+      const [dd, mm, yyyy] = str.split('/');
+      return `${yyyy}-${mm}-${dd}`;
+    };
+    fetchDashboardData(toApi(customFrom), toApi(customTo));
   };
 
   const handleTabPress = (tab) => {
-    if (tab.key === 'Logout') { navigation.replace('DmsLoginScreen'); return; }
-    if (tab.key === 'Reports') { navigation.navigate('ReportsScreen'); return; }
+    if (tab.key === 'Logout')  { navigation.replace('DmsLoginScreen');    return; }
+    if (tab.key === 'Reports') { navigation.navigate('ReportsScreen');    return; }
     if (tab.key === 'Enquiry') { navigation.navigate('NewEnquiryScreen'); return; }
+    if (tab.key === 'Members') { navigation.navigate('MembersScreen');    return; }
     setActiveTab(tab.key);
   };
 
   const handleQuickAction = (action) => {
-    if (action.key === 'new_enquiry') { navigation.navigate('NewEnquiryScreen'); return; }
-    if (action.key === 'reports') { navigation.navigate('ReportsScreen'); return; }
+    if (action.key === 'new_enquiry')       { navigation.navigate('NewEnquiryScreen');      return; }
+    if (action.key === 'reports')           { navigation.navigate('ReportsScreen');         return; }
+    if (action.key === 'Expenses')          { navigation.navigate('ExpensesScreen');        return; }
+    if (action.key === 'New Booking')       { navigation.navigate('NewBookingScreen');      return; }
+    if (action.key === 'Check-In Details')  { navigation.navigate('CheckinDetailsScreen'); return; }
   };
+
+  const handleOverviewCardPress = (card) => {
+    if (card.navigateTo) navigation.navigate(card.navigateTo);
+  };
+
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar backgroundColor={Colors.bg_dark} barStyle="light-content" />
 
-      {/* ── TOP HEADER ───────────────────────────────────────────────────── */}
+      {/* ── TOP HEADER ─────────────────────────────────────────────────── */}
       <View style={styles.header}>
 
-        {/* Left: User Info */}
         <View style={styles.userInfo}>
           <Text style={styles.username}>Arjun Saini</Text>
           <Text style={styles.dayText}>
@@ -217,14 +483,11 @@ const DashboardScreen = ({ navigation }) => {
           </Text>
           <Text style={styles.currentDate}>
             {new Date().toLocaleDateString('en-IN', {
-              day: 'numeric',
-              month: 'short',
-              year: 'numeric',
+              day: 'numeric', month: 'short', year: 'numeric',
             })}
           </Text>
         </View>
 
-        {/* Right: Notification + Avatar */}
         <View style={styles.headerRight}>
           <TouchableOpacity style={styles.bellBtn} activeOpacity={0.8}>
             <Image
@@ -234,7 +497,6 @@ const DashboardScreen = ({ navigation }) => {
             />
             <View style={styles.bellDot} />
           </TouchableOpacity>
-
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>T</Text>
           </View>
@@ -242,18 +504,25 @@ const DashboardScreen = ({ navigation }) => {
 
       </View>
 
-      {/* ── SCROLLABLE BODY ──────────────────────────────────────────────── */}
+      {/* ── SCROLLABLE BODY ────────────────────────────────────────────── */}
       <ScrollView
         style={styles.body}
-        contentContainerStyle={styles.bodyContent}
+        contentContainerStyle={[styles.bodyContent, { paddingBottom: 70 }]}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[Colors.primary]}
+            tintColor={Colors.primary}
+          />
+        }
       >
 
-        {/* ── OVERVIEW SECTION ───────────────────────────────────────────── */}
+        {/* ── OVERVIEW SECTION ─────────────────────────────────────────── */}
         <View style={styles.sectionRow}>
           <Text style={styles.sectionTitle}>Overview</Text>
 
-          {/* Dropdown Trigger */}
           <TouchableOpacity
             activeOpacity={0.7}
             style={styles.ddTrigger}
@@ -273,7 +542,7 @@ const DashboardScreen = ({ navigation }) => {
           </TouchableOpacity>
         </View>
 
-        {/* ── Period Dropdown Modal ─────────────────────────────────────── */}
+        {/* ── Period Dropdown Modal ───────────────────────────────────── */}
         <Modal
           visible={ddOpen}
           transparent
@@ -285,7 +554,7 @@ const DashboardScreen = ({ navigation }) => {
             activeOpacity={1}
             onPress={() => setDdOpen(false)}
           >
-            <View style={[styles.ddList, { top: dropdownLayout.y, right: 16 }]}>
+            <View style={[styles.ddList, { marginTop:135, right: 16 }]}>
               {PERIOD_OPTIONS.map((item, idx) => (
                 <TouchableOpacity
                   key={item}
@@ -312,25 +581,38 @@ const DashboardScreen = ({ navigation }) => {
           </TouchableOpacity>
         </Modal>
 
-        {/* ── OVERVIEW CARDS ─────────────────────────────────────────────── */}
+        {/* ── OVERVIEW CARDS ───────────────────────────────────────────── */}
         <View style={styles.overviewRow}>
           {OVERVIEW_CARDS.map((card) => (
-            <View key={card.key} style={styles.overviewCard}>
+            <TouchableOpacity
+              key={card.key}
+              style={styles.overviewCard}
+              activeOpacity={0.75}
+              onPress={() => handleOverviewCardPress(card)}
+            >
               <View style={[styles.overviewIconBox, { backgroundColor: card.iconBg }]}>
-                <Image
-                  source={card.icon}
-                  style={[styles.overviewIcon, { tintColor: card.iconTint }]}
-                  resizeMode="contain"
-                />
+                {loading ? (
+                  <ActivityIndicator size="small" color={Colors.primary} />
+                ) : (
+                  <Image
+                    source={card.icon}
+                    style={[styles.overviewIcon, { tintColor: card.iconTint }]}
+                    resizeMode="contain"
+                  />
+                )}
               </View>
-              <Text style={styles.overviewValue}>{card.value}</Text>
+              <Text style={styles.overviewValue}>
+                {loading ? '—' : card.value}
+              </Text>
               <Text style={styles.overviewLabel}>{card.label}</Text>
-              <Text style={styles.overviewGrowth}>{card.growth}</Text>
-            </View>
+              {card.growth ? (
+                <Text style={styles.overviewGrowth}>{card.growth}</Text>
+              ) : null}
+            </TouchableOpacity>
           ))}
         </View>
 
-        {/* ── QUICK ACTIONS SECTION ───────────────────────────────────────── */}
+        {/* ── QUICK ACTIONS ────────────────────────────────────────────── */}
         <Text style={[styles.sectionTitle, { marginTop: CommonHeights.height26 }]}>
           Quick Actions
         </Text>
@@ -361,7 +643,82 @@ const DashboardScreen = ({ navigation }) => {
 
       </ScrollView>
 
-      {/* ── BOTTOM NAV BAR ───────────────────────────────────────────────── */}
+      {/* ── CUSTOM DATE BOTTOM SHEET ───────────────────────────────────── */}
+      <Modal
+        visible={customModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setCustomModalVisible(false)}
+      >
+        <TouchableOpacity
+          style={customStyles.overlay}
+          activeOpacity={1}
+          onPress={() => setCustomModalVisible(false)}
+        />
+        <View style={customStyles.sheet}>
+          <View style={customStyles.handle} />
+          <Text style={customStyles.title}>Custom Date Range</Text>
+
+          {/* FROM DATE */}
+          <Text style={customStyles.label}>FROM DATE</Text>
+          <TouchableOpacity
+            style={customStyles.dateInput}
+            activeOpacity={0.8}
+            onPress={() => setCalFromOpen(true)}
+          >
+            <Text style={customFrom ? customStyles.dateValue : customStyles.datePlaceholder}>
+              {customFrom || 'dd/mm/yyyy'}
+            </Text>
+            <Text style={customStyles.calIcon}>📅</Text>
+          </TouchableOpacity>
+
+          {/* TO DATE */}
+          <Text style={[customStyles.label, { marginTop: 14 }]}>TO DATE</Text>
+          <TouchableOpacity
+            style={customStyles.dateInput}
+            activeOpacity={0.8}
+            onPress={() => setCalToOpen(true)}
+          >
+            <Text style={customTo ? customStyles.dateValue : customStyles.datePlaceholder}>
+              {customTo || 'dd/mm/yyyy'}
+            </Text>
+            <Text style={customStyles.calIcon}>📅</Text>
+          </TouchableOpacity>
+
+          {/* APPLY BUTTON */}
+          <TouchableOpacity
+            style={[
+              customStyles.applyBtn,
+              (!customFrom || !customTo) && customStyles.applyBtnDisabled,
+            ]}
+            activeOpacity={0.85}
+            disabled={!customFrom || !customTo}
+            onPress={handleApplyCustom}
+          >
+            <Text style={customStyles.applyBtnText}>Apply</Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
+
+      {/* ── FROM Calendar ──────────────────────────────────────────────── */}
+      <CalendarPicker
+        visible={calFromOpen}
+        selectedDate={customFrom}
+        onSelect={(date) => { setCustomFrom(date); setCalFromOpen(false); }}
+        onClear={() => setCustomFrom('')}
+        onClose={() => setCalFromOpen(false)}
+      />
+
+      {/* ── TO Calendar ────────────────────────────────────────────────── */}
+      <CalendarPicker
+        visible={calToOpen}
+        selectedDate={customTo}
+        onSelect={(date) => { setCustomTo(date); setCalToOpen(false); }}
+        onClear={() => setCustomTo('')}
+        onClose={() => setCalToOpen(false)}
+      />
+
+      {/* ── BOTTOM NAV BAR ─────────────────────────────────────────────── */}
       <View style={styles.navBar}>
         {NAV_TABS.map((tab) => {
           const isActive = activeTab === tab.key;
@@ -395,383 +752,420 @@ const DashboardScreen = ({ navigation }) => {
   );
 };
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
+export default DashboardScreen;
+
+// ─── Main Styles ──────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
 
   safeArea: {
-    flex: 1,
-    backgroundColor: Colors.page_bg,
+    flex:            1,
+    backgroundColor: Colors.bg_dark,
   },
-
 
   header: {
-    backgroundColor: Colors.bg_dark,
+    backgroundColor:   Colors.bg_dark,
     paddingHorizontal: CommonWidths.width20,
-    paddingTop: CommonHeights.height8,
-    paddingBottom: CommonHeights.height28,
-    marginTop: 15,
-    flexDirection: 'row',
-    alignItems: 'center',         
-    justifyContent: 'space-between',
+    paddingTop:        CommonHeights.height8,
+    paddingBottom:     CommonHeights.height28,
+    marginTop:         15,
+    flexDirection:     'row',
+    alignItems:        'center',
+    justifyContent:    'space-between',
   },
-
-  // ── User Info (left side of header) ───────────────────────────────────────
 
   userInfo: {
     flexDirection: 'column',
-    alignItems: 'flex-start',
+    alignItems:    'flex-start',
   },
-
   username: {
-    color: Colors.text_white,
-    fontSize: CommonFonts.font20,
-    fontWeight: '580',
-    top: 10,
-  },
-
-  // NEW — day name below username
-  dayText: {
-    color: Colors.primary,
-    fontSize: CommonFonts.font12,
+    color:      Colors.text_white,
+    fontSize:   CommonFonts.font20,
     fontWeight: '600',
-    marginTop: 2,
-    top: 10,
+    top:        10,
   },
-
+  dayText: {
+    color:      Colors.primary,
+    fontSize:   CommonFonts.font12,
+    fontWeight: '600',
+    marginTop:  2,
+    top:        10,
+  },
   currentDate: {
-    color: Colors.text_grey,
-    fontSize: CommonFonts.font11,
+    color:     Colors.text_grey,
+    fontSize:  CommonFonts.font11,
     marginTop: 2,
-    top: 10,
+    top:       10,
   },
-
-  // ── Header Right (bell + avatar) ──────────────────────────────────────────
 
   headerRight: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: CommonWidths.width12,
+    alignItems:    'center',
+    gap:           CommonWidths.width12,
   },
-
   bellBtn: {
-    width: CommonWidths.width40,
-    height: CommonHeights.height40,
-    borderRadius: 22,
+    width:           CommonWidths.width40,
+    height:          CommonHeights.height40,
+    borderRadius:    22,
     backgroundColor: 'rgba(255,255,255,0.08)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems:      'center',
+    justifyContent:  'center',
   },
-
   bellIcon: {
-    width: CommonWidths.width20,
-    height: CommonHeights.height20,
+    width:     CommonWidths.width20,
+    height:    CommonHeights.height20,
     tintColor: Colors.text_white,
   },
-
   bellDot: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    position:        'absolute',
+    top:             10,
+    right:           10,
+    width:           8,
+    height:          8,
+    borderRadius:    4,
     backgroundColor: Colors.primary,
-    borderWidth: 1.5,
-    borderColor: Colors.bg_dark,
+    borderWidth:     1.5,
+    borderColor:     Colors.bg_dark,
   },
-
   dropdownIcon: {
-    width: 14,
-    height: 14,
+    width:     14,
+    height:    14,
     tintColor: Colors.primary,
   },
-
   avatar: {
-    width: CommonWidths.width40,
-    height: CommonHeights.height40,
-    borderRadius: 22,
+    width:           CommonWidths.width40,
+    height:          CommonHeights.height40,
+    borderRadius:    22,
     backgroundColor: Colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems:      'center',
+    justifyContent:  'center',
   },
-
   avatarText: {
-    color: Colors.bg_dark,
-    fontSize: CommonFonts.font18,
+    color:      Colors.bg_dark,
+    fontSize:   CommonFonts.font18,
     fontWeight: 'bold',
   },
 
-  // ── Body ──────────────────────────────────────────────────────────────────
-
-  body: {
-    flex: 1,
-    backgroundColor: Colors.page_bg,
-  },
-
+  body:        { flex: 1, backgroundColor: Colors.page_bg },
   bodyContent: {
     paddingHorizontal: CommonWidths.width16,
-    paddingTop: CommonHeights.height22,
-    paddingBottom: CommonHeights.height30,
+    paddingTop:        CommonHeights.height22,
+    paddingBottom:     CommonHeights.height30,
   },
 
   sectionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection:  'row',
+    alignItems:     'center',
     justifyContent: 'space-between',
-    marginBottom: CommonHeights.height16,
+    marginBottom:   CommonHeights.height16,
   },
-
   sectionTitle: {
-    color: Colors.text_dark,
-    fontSize: CommonFonts.font16,
+    color:      Colors.text_dark,
+    fontSize:   CommonFonts.font16,
     fontWeight: 'bold',
   },
 
-  // ── Dropdown Trigger ──────────────────────────────────────────────────────
-
   ddTrigger: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.inputBgColor,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Colors.inputBorder,
+    flexDirection:     'row',
+    alignItems:        'center',
+    backgroundColor:   Colors.inputBgColor,
+    borderRadius:      8,
+    borderWidth:       1,
+    borderColor:       Colors.inputBorder,
     paddingHorizontal: 10,
-    paddingVertical: 5,
-    gap: 4,
+    paddingVertical:   5,
+    gap:               4,
   },
-
   ddTriggerText: {
-    color: Colors.primary,
-    fontSize: CommonFonts.font13,
+    color:      Colors.primary,
+    fontSize:   CommonFonts.font13,
     fontWeight: '600',
   },
 
-  // ── Dropdown Modal ────────────────────────────────────────────────────────
-
   ddBackdrop: {
-    flex: 1,
+    flex:            1,
     backgroundColor: 'transparent',
-     bottom: 34,
-     marginLeft: 10,
   },
-
   ddList: {
-    position: 'absolute',
-    width: 109,
+    position:        'absolute',
+    width:           130,
     backgroundColor: Colors.card_bg,
-    borderRadius: 1,
-    borderWidth: 1,
-    borderColor: Colors.inputBorder,
-    overflow: 'hidden',
-   
+    borderRadius:    10,
+    borderWidth:     1,
+    borderColor:     Colors.inputBorder,
+    overflow:        'hidden',
     ...Platform.select({
-      ios: {
-        shadowColor: '#94A3B8',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.18,
-        shadowRadius: 12,
-      },
-      android: { elevation: 4 },
+      ios:     { shadowColor: '#94A3B8', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.18, shadowRadius: 12 },
+      android: { elevation: 6 },
     }),
   },
-
   ddItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection:     'row',
+    alignItems:        'center',
+    justifyContent:    'space-between',
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical:   10,
   },
-
   ddItemBorder: {
     borderBottomWidth: 1,
     borderBottomColor: Colors.inputBorder,
   },
-
   ddItemActive: {
     backgroundColor: 'rgba(245,158,11,0.08)',
   },
-
   ddItemText: {
-    color: Colors.text_dark,
-    fontSize: CommonFonts.font11,
+    color:      Colors.text_dark,
+    fontSize:   CommonFonts.font11,
     fontWeight: '500',
   },
-
   ddItemTextActive: {
-    color: Colors.primary,
+    color:      Colors.primary,
     fontWeight: '700',
   },
-
   ddCheckmark: {
-    color: Colors.primary,
-    fontSize: CommonFonts.font11,
+    color:      Colors.primary,
+    fontSize:   CommonFonts.font11,
     fontWeight: '700',
   },
-
-  // ── Overview Cards ────────────────────────────────────────────────────────
 
   overviewRow: {
     flexDirection: 'row',
-    gap: CommonWidths.width12,
-    
+    gap:           CommonWidths.width12,
   },
-
   overviewCard: {
-    flex: 1,
-    backgroundColor: Colors.card_bg,
-    borderRadius: 10,
+    flex:              1,
+    backgroundColor:   Colors.card_bg,
+    borderRadius:      10,
     paddingHorizontal: CommonWidths.width10,
-    paddingVertical: CommonHeights.height8,
-    paddingBottom: -3,
-    
-    alignItems: 'flex-start',
-    justifyContent:'center',
-    marginTop: 12,
+    paddingVertical:   CommonHeights.height12,
+    alignItems:        'flex-start',
+    justifyContent:    'center',
+    marginTop:         12,
     ...Platform.select({
-      ios: {
-        shadowColor: '#B0B8C8',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.13,
-        shadowRadius: 8,
-      },
+      ios:     { shadowColor: '#B0B8C8', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.13, shadowRadius: 8 },
       android: { elevation: 3 },
     }),
   },
-
   overviewIconBox: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    alignItems: 'center',
+    width:          34,
+    height:         34,
+    borderRadius:   10,
+    alignItems:     'center',
     justifyContent: 'center',
-    marginBottom: CommonHeights.height8,
+    marginBottom:   CommonHeights.height8,
   },
-
   overviewIcon: {
-    width: 16,
+    width:  16,
     height: 16,
   },
-
   overviewValue: {
-    color: Colors.text_dark,
-    fontSize: CommonFonts.font18,
+    color:      Colors.text_dark,
+    fontSize:   CommonFonts.font14,
     fontWeight: 'bold',
-    
   },
-
   overviewLabel: {
-    color: Colors.text_grey,
-    fontSize: CommonFonts.font10,
-    fontWeight: '600',
+    color:         Colors.text_grey,
+    fontSize:      CommonFonts.font10,
+    fontWeight:    '600',
     letterSpacing: 0.5,
-    top:5,
+    marginTop:     4,
   },
-
   overviewGrowth: {
-    color: Colors.green_text,
-    fontSize: CommonFonts.font11,
+    color:      Colors.green_text,
+    fontSize:   CommonFonts.font11,
     fontWeight: '600',
-    marginLeft: 50,
-    bottom: 75,
-   
+    marginTop:  4,
   },
-
-  // ── Quick Actions ─────────────────────────────────────────────────────────
 
   quickActionsGrid: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: CommonWidths.width12,
-    marginTop: CommonHeights.height18,
+    flexWrap:      'wrap',
+    gap:           CommonWidths.width12,
+    marginTop:     CommonHeights.height18,
   },
-
   quickActionCard: {
-    width: '47%',
-    backgroundColor: Colors.card_bg,
-    borderRadius: 10,
+    width:             '47%',
+    backgroundColor:   Colors.card_bg,
+    borderRadius:      10,
     paddingHorizontal: CommonWidths.width16,
-    paddingVertical: CommonHeights.height12,
-    alignItems: 'flex-start',
-    justifyContent: 'center',
+    paddingVertical:   CommonHeights.height12,
+    alignItems:        'flex-start',
+    justifyContent:    'center',
     ...Platform.select({
-      ios: {
-        shadowColor: '#B0B8C8',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.13,
-        shadowRadius: 8,
-      },
+      ios:     { shadowColor: '#B0B8C8', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.13, shadowRadius: 8 },
       android: { elevation: 3 },
     }),
   },
-
   quickActionIconBox: {
-    width: 34,
-    height: 34,
-    borderRadius: 12,
-    alignItems: 'center',
+    width:          34,
+    height:         34,
+    borderRadius:   12,
+    alignItems:     'center',
     justifyContent: 'center',
-    marginBottom: CommonHeights.height12,
+    marginBottom:   CommonHeights.height12,
   },
-
   plusSign: {
-    color: Colors.text_white,
-    fontSize: CommonFonts.font20,
+    color:      Colors.text_white,
+    fontSize:   CommonFonts.font20,
     fontWeight: '300',
     lineHeight: 26,
   },
-
   quickActionIcon: {
-    width: CommonWidths.width20,
+    width:  CommonWidths.width20,
     height: CommonHeights.height20,
   },
-
   quickActionLabel: {
-    color: Colors.text_dark,
-    fontSize: CommonFonts.font14,
+    color:      Colors.text_dark,
+    fontSize:   CommonFonts.font14,
     fontWeight: '600',
   },
 
-  // ── Bottom Nav Bar ────────────────────────────────────────────────────────
-
-  navBar: {
-    flexDirection: 'row',
-    backgroundColor: Colors.nav_bg,
-    borderTopWidth: 1,
-    borderTopColor: Colors.inputBorder,
-    paddingBottom: Platform.OS === 'ios' ? 16 : CommonHeights.height10,
-    paddingTop: CommonHeights.height14,
-    paddingHorizontal: CommonWidths.width8,
-  },
-
+ navBar: {
+  flexDirection:     'row',
+  backgroundColor:   Colors.nav_bg,
+  borderTopWidth:    1,
+  borderTopColor:    Colors.inputBorder,
+  paddingBottom:     Platform.OS === 'android' ? 45 : 36,  // ← 10+20
+  paddingTop:        12,
+  paddingHorizontal: 4,
+  height:            Platform.OS === 'android' ? 100 : 84,  // ← 64+20
+},
   navTab: {
-    flex: 1,
-    alignItems: 'center',
+    flex:           1,
+    alignItems:     'center',
     justifyContent: 'center',
-    gap: 4,
+    paddingVertical: 4,
+    gap:            3,
   },
-
   navIcon: {
-    width: CommonWidths.width20,
-    height: CommonHeights.height20,
+    width:  24,
+    height: 24,
   },
-
   navLabel: {
-    fontSize: CommonFonts.font11,
+    fontSize:   10,
     fontWeight: '500',
+    marginTop:  2,
   },
-
   navLabelActive: {
-    color: Colors.nav_active,
+    color:      Colors.nav_active,
     fontWeight: '700',
   },
-
   navLabelInactive: {
     color: Colors.nav_inactive,
   },
-
 });
 
-export default DashboardScreen;
+// ─── Custom Date Sheet Styles ─────────────────────────────────────────────────
+
+const customStyles = StyleSheet.create({
+  overlay: {
+    position:        'absolute',
+    top:             0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  sheet: {
+    position:             'absolute',
+    bottom:               0, left: 0, right: 0,
+    backgroundColor:      Colors.card_bg,
+    borderTopLeftRadius:  24,
+    borderTopRightRadius: 24,
+    padding:              24,
+    paddingBottom:        Platform.OS === 'ios' ? 40 : 28,
+    ...Platform.select({
+      ios:     { shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.12, shadowRadius: 16 },
+      android: { elevation: 20 },
+    }),
+  },
+  handle: {
+    alignSelf:       'center',
+    width:           40,
+    height:          4,
+    borderRadius:    2,
+    backgroundColor: Colors.inputBorder,
+    marginBottom:    16,
+  },
+  title: {
+    color:        Colors.text_dark,
+    fontSize:     16,
+    fontWeight:   '700',
+    marginBottom: 20,
+  },
+  label: {
+    color:         Colors.text_label,
+    fontSize:      11,
+    fontWeight:    '700',
+    letterSpacing: 0.6,
+    marginBottom:  6,
+  },
+  dateInput: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    justifyContent:    'space-between',
+    backgroundColor:   Colors.inputBgColor,
+    borderRadius:      12,
+    borderWidth:       1.5,
+    borderColor:       Colors.inputBorder,
+    paddingHorizontal: 14,
+    paddingVertical:   13,
+  },
+  dateValue:       { color: Colors.text_dark, fontSize: 14 },
+  datePlaceholder: { color: Colors.text_grey, fontSize: 14 },
+  calIcon:         { fontSize: 18 },
+  applyBtn: {
+    backgroundColor: Colors.bg_dark,
+    borderRadius:    12,
+    alignItems:      'center',
+    paddingVertical: 15,
+    marginTop:       20,
+  },
+  applyBtnDisabled: {
+    opacity: 0.4,
+  },
+  applyBtnText: {
+    color:      Colors.text_white,
+    fontSize:   15,
+    fontWeight: '700',
+  },
+});
+
+// ─── Calendar Styles ──────────────────────────────────────────────────────────
+
+const calStyles = StyleSheet.create({
+  backdrop: {
+    position:        'absolute',
+    top:             0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  card: {
+    position:      'absolute',
+    top:           '20%',
+    alignSelf:     'center',
+    width:         300,
+    backgroundColor: Colors.card_bg,
+    borderRadius:  18,
+    padding:       20,
+    ...Platform.select({
+      ios:     { shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.18, shadowRadius: 20 },
+      android: { elevation: 14 },
+    }),
+  },
+  headerRow:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 },
+  monthBtn:    { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  monthText:   { color: Colors.text_dark, fontSize: 16, fontWeight: '700' },
+  monthArrow:  { color: Colors.text_grey, fontSize: 12 },
+  navBtns:     { flexDirection: 'row', gap: 16 },
+  navBtn:      { padding: 4 },
+  navArrow:    { color: Colors.text_dark, fontSize: 18, fontWeight: '300' },
+  dayLabelRow: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 8 },
+  dayLabel:    { width: 32, textAlign: 'center', color: Colors.text_grey, fontSize: 13, fontWeight: '600' },
+  grid:        { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-around', rowGap: 4 },
+  cell:        { width: 32, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 8 },
+  cellSelected:  { backgroundColor: '#1D6AFF', borderRadius: 10 },
+  cellText:      { color: Colors.text_dark, fontSize: 14 },
+  cellTextOther: { color: Colors.text_grey },
+  cellTextToday: { color: '#1D6AFF', fontWeight: '700' },
+  cellTextSel:   { color: '#FFFFFF', fontWeight: '700' },
+  footer:      { flexDirection: 'row', justifyContent: 'space-between', marginTop: 18, paddingTop: 14, borderTopWidth: 1, borderColor: Colors.inputBorder },
+  footerClear: { color: '#1D6AFF', fontSize: 14, fontWeight: '600' },
+  footerToday: { color: '#1D6AFF', fontSize: 14, fontWeight: '600' },
+});

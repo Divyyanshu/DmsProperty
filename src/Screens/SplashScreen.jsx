@@ -10,6 +10,7 @@ import {
   StatusBar,
   SafeAreaView,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Colors from '../Constants/Colors';
 
 const { width, height } = Dimensions.get('window');
@@ -87,8 +88,7 @@ export default function SplashScreen({ navigation }) {
   const barWidth      = useRef(new Animated.Value(0)).current;
   const screenOpacity = useRef(new Animated.Value(1)).current;
 
-  useEffect(() => {
-    // ── Sequence ──────────────────────────────────────────────────────────
+useEffect(() => {
     Animated.sequence([
       Animated.parallel([
         Animated.timing(logoOpacity, {
@@ -105,7 +105,6 @@ export default function SplashScreen({ navigation }) {
         }),
       ]),
 
-      // 2. Brand name slides up
       Animated.parallel([
         Animated.timing(brandOpacity, {
           toValue: 1,
@@ -120,7 +119,6 @@ export default function SplashScreen({ navigation }) {
         }),
       ]),
 
-      // 3. Tagline slides up
       Animated.parallel([
         Animated.timing(taglineOpacity, {
           toValue: 1,
@@ -135,23 +133,26 @@ export default function SplashScreen({ navigation }) {
         }),
       ]),
 
-      // 4. Progress bar fills
       Animated.timing(barWidth, {
         toValue: 1,
         duration: 1600,
         easing: Easing.inOut(Easing.cubic),
-        useNativeDriver: false, // width cannot use native driver
+        useNativeDriver: false,
       }),
 
-      // 5. Fade out before navigating
       Animated.timing(screenOpacity, {
         toValue: 0,
         duration: 400,
         easing: Easing.in(Easing.cubic),
         useNativeDriver: true,
       }),
-    ]).start(() => {
-      navigation.replace('DmsLoginScreen');
+    ]).start(async () => {
+      const token = await AsyncStorage.getItem('token');
+      if (token) {
+        navigation.replace('DashboardScreen'); // ← apna screen naam yahan lagao
+      } else {
+        navigation.replace('DmsLoginScreen');
+      }
     });
   }, []);
 

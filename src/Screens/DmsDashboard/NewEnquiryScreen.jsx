@@ -11,8 +11,11 @@ import {
   Platform,
   TextInput,
   Modal,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 
+import { insertEnquiry, updateEnquiry, getSingleEnquiry } from '../../Api/ApiService';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. CONSTANTS
@@ -38,6 +41,8 @@ const Colors = {
   gender_bg:      '#E8ECF4',
   red_text:       '#EF4444',
   red_bg:         'rgba(239,68,68,0.12)',
+  dot_available:  '#22C55E',
+  dot_sold:       '#EF4444',
 };
 
 const F = {
@@ -46,20 +51,34 @@ const F = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 2. DATA
+// 2. HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+// "dd/mm/yyyy" → "YYYY-MM-DD"  (API ke liye)
+const formatDateForApi = (dateStr) => {
+  if (!dateStr) return '';
+  const [dd, mm, yyyy] = dateStr.split('/');
+  return `${yyyy}-${mm}-${dd}`;
+};
+
+// "YYYY-MM-DDT..." → "dd/mm/yyyy"  (API se aane wala data display ke liye)
+const formatDateFromApi = (raw) => {
+  if (!raw) return '';
+  const datePart = raw.split('T')[0]; // "2026-05-25"
+  const [yyyy, mm, dd] = datePart.split('-');
+  return `${dd}/${mm}/${yyyy}`;
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 3. DATA
 // ─────────────────────────────────────────────────────────────────────────────
 
 const CATEGORIES = [
-  { key: 'gym',       label: 'Gym',       emoji: '🏋️' },
-  { key: 'farmhouse', label: 'Farmhouse', emoji: '🌾'  },
-  { key: 'airbnb',    label: 'Airbnb',    emoji: '🏠'  },
+  { key: 'farmhouse', label: 'Farmhouse', emoji: '🌾' },
+  { key: 'airbnb',    label: 'Airbnb',    emoji: '🏠' },
 ];
 
 const PROPERTIES = {
-  gym: [
-    { key: 'g1', label: "Raja Park",    badge: 'Gym', emoji: '🏋️' },
-    { key: 'g2', label: 'Summer Nagar', badge: 'Gym', emoji: '🏋️' },
-  ],
   farmhouse: [
     { key: 'f1', label: 'Grey Stone', badge: 'Farmhouse', emoji: '🌾' },
     { key: 'f2', label: 'SkyStone',   badge: 'Farmhouse', emoji: '🌾' },
@@ -78,35 +97,73 @@ const DURATIONS = [
   { key: '1y', num: '1', sub: 'YEAR'   },
 ];
 
-const GYM_SERVICES = [
-  'Weight Training',
-  'Cardio',
-  'Zumba',
-  'Yoga',
-  'CrossFit',
-  'Swimming',
-  'Personal Training',
-  'Group Classes',
-  'Pilates',
-  'Kickboxing',
-  'Cycling',
-  'Steam / Sauna',
-  'Locker',
-  'Other',
-];
-
 const CUSTOMER_ICON_BG = {
-  gym:       Colors.dark_icon_bg,
   farmhouse: Colors.gold_icon_bg,
   airbnb:    Colors.gold_icon_bg,
 };
 
 const CUSTOMER_EMOJI = {
-  gym: '👤', farmhouse: '🌾', airbnb: '🏠',
+  farmhouse: '🌾', airbnb: '🏠',
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 3. CALENDAR PICKER
+// 4. AVAILABILITY DATA
+// ─────────────────────────────────────────────────────────────────────────────
+
+const availKey = (year, month, day) => {
+  const mm = String(month + 1).padStart(2, '0');
+  const dd = String(day).padStart(2, '0');
+  return `${year}-${mm}-${dd}`;
+};
+
+const buildAvailability = (soldPatterns) => {
+  const result = {};
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  [currentYear, currentYear + 1].forEach((yr) => {
+    soldPatterns.forEach(({ month, days }) => {
+      days.forEach((day) => {
+        const mm = String(month).padStart(2, '0');
+        const dd = String(day).padStart(2, '0');
+        result[`${yr}-${mm}-${dd}`] = 'sold';
+      });
+    });
+  });
+  return result;
+};
+
+const FARMHOUSE_AVAILABILITY = buildAvailability([
+  { month: 1,  days: [1,2,3,4,5,10,11,12,17,18,19,24,25,26,31] },
+  { month: 2,  days: [1,2,7,8,9,14,15,16,21,22,23,28] },
+  { month: 3,  days: [1,2,7,8,9,14,15,16,21,22,23,28,29,30] },
+  { month: 4,  days: [4,5,6,11,12,13,18,19,20,25,26,27] },
+  { month: 5,  days: [1,2,3,9,10,11,16,17,18,23,24,25,30,31] },
+  { month: 6,  days: [1,6,7,8,13,14,15,20,21,22,27,28,29] },
+  { month: 7,  days: [4,5,6,11,12,13,18,19,20,25,26,27] },
+  { month: 8,  days: [1,2,3,8,9,10,15,16,17,22,23,24,29,30,31] },
+  { month: 9,  days: [5,6,7,12,13,14,19,20,21,26,27,28] },
+  { month: 10, days: [3,4,5,10,11,12,17,18,19,24,25,26,31] },
+  { month: 11, days: [1,2,7,8,9,14,15,16,21,22,23,28,29,30] },
+  { month: 12, days: [5,6,7,12,13,14,19,20,21,24,25,26,27,28,31] },
+]);
+
+const AIRBNB_AVAILABILITY = buildAvailability([
+  { month: 1,  days: [2,3,6,7,8,13,14,15,20,21,22,27,28,29] },
+  { month: 2,  days: [3,4,5,10,11,12,17,18,19,24,25,26] },
+  { month: 3,  days: [3,4,5,10,11,12,17,18,19,24,25,26,31] },
+  { month: 4,  days: [1,2,7,8,9,14,15,16,21,22,23,28,29,30] },
+  { month: 5,  days: [1,5,6,7,12,13,14,19,20,21,26,27,28] },
+  { month: 6,  days: [2,3,4,9,10,11,16,17,18,23,24,25,30] },
+  { month: 7,  days: [1,2,7,8,9,14,15,16,21,22,23,28,29,30] },
+  { month: 8,  days: [4,5,6,11,12,13,18,19,20,25,26,27] },
+  { month: 9,  days: [1,2,3,8,9,10,15,16,17,22,23,24,29,30] },
+  { month: 10, days: [1,6,7,8,13,14,15,20,21,22,27,28,29] },
+  { month: 11, days: [3,4,5,10,11,12,17,18,19,24,25,26] },
+  { month: 12, days: [1,2,3,8,9,10,15,16,17,22,23,24,25,26,29,30,31] },
+]);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 5. CALENDAR PICKER
 // ─────────────────────────────────────────────────────────────────────────────
 
 const DAYS_SHORT  = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
@@ -115,7 +172,14 @@ const MONTHS_LONG = [
   'July','August','September','October','November','December',
 ];
 
-const CalendarPicker = ({ visible, selectedDate, onSelect, onClear, onClose }) => {
+const CalendarPicker = ({
+  visible,
+  selectedDate,
+  onSelect,
+  onClear,
+  onClose,
+  availability = {},
+}) => {
   const today = new Date();
   const [viewYear,  setViewYear]  = useState(today.getFullYear());
   const [viewMonth, setViewMonth] = useState(today.getMonth());
@@ -161,12 +225,25 @@ const CalendarPicker = ({ visible, selectedDate, onSelect, onClear, onClose }) =
   const isSelected = (cell) => {
     if (!cell.cur || !selectedDate) return false;
     const s = parseDate(selectedDate);
-    return s.getDate() === cell.day && s.getMonth() === viewMonth && s.getFullYear() === viewYear;
+    return (
+      s.getDate()     === cell.day &&
+      s.getMonth()    === viewMonth &&
+      s.getFullYear() === viewYear
+    );
   };
 
   const isToday = (cell) => {
     if (!cell.cur) return false;
-    return cell.day === today.getDate() && viewMonth === today.getMonth() && viewYear === today.getFullYear();
+    return (
+      cell.day  === today.getDate()  &&
+      viewMonth === today.getMonth() &&
+      viewYear  === today.getFullYear()
+    );
+  };
+
+  const getAvailStatus = (day) => {
+    const key = availKey(viewYear, viewMonth, day);
+    return availability[key] || 'available';
   };
 
   const handleSelect = (cell) => {
@@ -210,26 +287,43 @@ const CalendarPicker = ({ visible, selectedDate, onSelect, onClear, onClose }) =
         </View>
         <View style={calSt.grid}>
           {cells.map((cell, i) => {
-            const sel = isSelected(cell);
-            const tod = isToday(cell) && !sel;
+            const sel    = isSelected(cell);
+            const tod    = isToday(cell) && !sel;
+            const status = cell.cur ? getAvailStatus(cell.day) : null;
+            const isSold = status === 'sold';
             return (
               <TouchableOpacity
                 key={i}
-                style={[calSt.cell, sel && calSt.cellSelected]}
-                onPress={() => handleSelect(cell)}
-                activeOpacity={cell.cur ? 0.7 : 1}
+                style={[calSt.cell, sel && calSt.cellSelected, isSold && calSt.cellSoldOut]}
+                onPress={() => { if (!cell.cur || isSold) return; handleSelect(cell); }}
+                activeOpacity={cell.cur && !isSold ? 0.7 : 1}
+                disabled={isSold}
               >
                 <Text style={[
                   calSt.cellText,
                   !cell.cur && calSt.cellTextOther,
-                  tod       && calSt.cellTextToday,
-                  sel       && calSt.cellTextSel,
+                  tod        && calSt.cellTextToday,
+                  sel        && calSt.cellTextSel,
+                  isSold     && calSt.cellTextSold,
                 ]}>
                   {cell.day}
                 </Text>
+                {cell.cur && (
+                  <View style={[calSt.dot, { backgroundColor: isSold ? Colors.dot_sold : Colors.dot_available }]} />
+                )}
               </TouchableOpacity>
             );
           })}
+        </View>
+        <View style={calSt.legend}>
+          <View style={calSt.legendItem}>
+            <View style={[calSt.legendDot, { backgroundColor: Colors.dot_available }]} />
+            <Text style={calSt.legendText}>Available</Text>
+          </View>
+          <View style={calSt.legendItem}>
+            <View style={[calSt.legendDot, { backgroundColor: Colors.dot_sold }]} />
+            <Text style={calSt.legendText}>Sold Out</Text>
+          </View>
         </View>
         <View style={calSt.footer}>
           <TouchableOpacity onPress={() => { onClear(); onClose(); }} activeOpacity={0.7}>
@@ -245,7 +339,7 @@ const CalendarPicker = ({ visible, selectedDate, onSelect, onClear, onClose }) =
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 4. REUSABLE COMPONENTS
+// 6. REUSABLE COMPONENTS
 // ─────────────────────────────────────────────────────────────────────────────
 
 const SectionCard = ({ iconEmoji, iconBg = Colors.dark_icon_bg, title, children }) => (
@@ -268,7 +362,10 @@ const FieldLabel = ({ text, required }) => (
   </View>
 );
 
-const FormInput = ({ placeholder, value, onChangeText, icon, keyboardType, multiline, numberOfLines, style }) => {
+const FormInput = ({
+  placeholder, value, onChangeText, icon,
+  keyboardType, multiline, numberOfLines, style,
+}) => {
   const [focused, setFocused] = useState(false);
   return (
     <View style={[
@@ -294,28 +391,16 @@ const FormInput = ({ placeholder, value, onChangeText, icon, keyboardType, multi
   );
 };
 
-const DateInput = ({ value, onChange }) => {
+const DateInput = ({ value, onChange, availability }) => {
   const [calOpen, setCalOpen] = useState(false);
   return (
     <View>
-      <TouchableOpacity
-        style={inputSt.wrapper}
-        onPress={() => setCalOpen(true)}
-        activeOpacity={0.8}
-      >
-        <Image
-          source={require('../../Assets/icons/calendar.png')}
-          style={inputSt.icon}
-          resizeMode="contain"
-        />
+      <TouchableOpacity style={inputSt.wrapper} onPress={() => setCalOpen(true)} activeOpacity={0.8}>
+        <Image source={require('../../Assets/icons/calendar.png')} style={inputSt.icon} resizeMode="contain" />
         <Text style={[inputSt.input, !value && { color: Colors.text_grey }]}>
           {value || 'dd/mm/yyyy'}
         </Text>
-        <Image
-          source={require('../../Assets/icons/calendar.png')}
-          style={inputSt.calIcon}
-          resizeMode="contain"
-        />
+        <Image source={require('../../Assets/icons/calendar.png')} style={inputSt.calIcon} resizeMode="contain" />
       </TouchableOpacity>
       <CalendarPicker
         visible={calOpen}
@@ -323,29 +408,22 @@ const DateInput = ({ value, onChange }) => {
         onSelect={onChange}
         onClear={() => onChange('')}
         onClose={() => setCalOpen(false)}
+        availability={availability}
       />
     </View>
   );
 };
 
-const HalfDateInput = ({ label, val, onChange }) => {
+const HalfDateInput = ({ label, val, onChange, availability }) => {
   const [calOpen, setCalOpen] = useState(false);
   return (
     <View style={{ flex: 1 }}>
       <FieldLabel text={label} />
-      <TouchableOpacity
-        style={inputSt.wrapper}
-        onPress={() => setCalOpen(true)}
-        activeOpacity={0.8}
-      >
+      <TouchableOpacity style={inputSt.wrapper} onPress={() => setCalOpen(true)} activeOpacity={0.8}>
         <Text style={{ flex: 1, color: val ? Colors.text_dark : Colors.text_grey, fontSize: F.f13 }}>
           {val || 'dd/mm/yyyy'}
         </Text>
-        <Image
-          source={require('../../Assets/icons/calendar.png')}
-          style={inputSt.calIcon}
-          resizeMode="contain"
-        />
+        <Image source={require('../../Assets/icons/calendar.png')} style={inputSt.calIcon} resizeMode="contain" />
       </TouchableOpacity>
       <CalendarPicker
         visible={calOpen}
@@ -353,15 +431,16 @@ const HalfDateInput = ({ label, val, onChange }) => {
         onSelect={onChange}
         onClear={() => onChange('')}
         onClose={() => setCalOpen(false)}
+        availability={availability}
       />
     </View>
   );
 };
 
-const DateRow = ({ leftLabel, rightLabel, leftVal, rightVal, onLeftChange, onRightChange }) => (
+const DateRow = ({ leftLabel, rightLabel, leftVal, rightVal, onLeftChange, onRightChange, availability }) => (
   <View style={{ flexDirection: 'row', gap: 10 }}>
-    <HalfDateInput label={leftLabel}  val={leftVal}  onChange={onLeftChange}  />
-    <HalfDateInput label={rightLabel} val={rightVal} onChange={onRightChange} />
+    <HalfDateInput label={leftLabel} val={leftVal}  onChange={onLeftChange}  availability={availability} />
+    <HalfDateInput label={rightLabel} val={rightVal} onChange={onRightChange} availability={availability} />
   </View>
 );
 
@@ -452,183 +531,17 @@ const DurationChips = ({ value, onChange }) => (
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 5. SERVICE ROW
+// 9. MAIN SCREEN
 // ─────────────────────────────────────────────────────────────────────────────
 
-const ServiceRow = ({ index, service, onServiceChange, onAmountChange, onRemove }) => {
-  const [ddOpen,  setDdOpen]  = useState(false);
-  const [focused, setFocused] = useState(false);
-  const [dropPos, setDropPos] = useState({ x: 0, y: 0, w: 0 });
-  const triggerRef            = useRef(null);
+const NewEnquiryScreen = ({ navigation, route }) => {
 
-  const amount    = parseInt(service.amount || '0', 10);
-  const increment = () => onAmountChange(String(amount + 100));
-  const decrement = () => { if (amount > 0) onAmountChange(String(amount - 100)); };
+  // ── Edit mode detect ───────────────────────────────────────────────────────
+  const enquiryId = route?.params?.enquiryId ?? null;
+  const isEditMode = !!enquiryId;
 
-  const openDropdown = () => {
-    triggerRef.current?.measureInWindow((x, y, width, height) => {
-      setDropPos({ x, y: y + height, w: width });
-      setDdOpen(true);
-    });
-  };
-
-  return (
-    <View style={svcSt.row}>
-
-      <View style={svcSt.indexBadge}>
-        <Text style={svcSt.indexText}>{index}</Text>
-      </View>
-
-      <View style={svcSt.dropWrap}>
-        <TouchableOpacity
-          ref={triggerRef}
-          style={[svcSt.dropTrigger, ddOpen && svcSt.dropTriggerOpen]}
-          onPress={openDropdown}
-          activeOpacity={0.8}
-        >
-          <Text
-            style={service.name ? svcSt.dropSelected : svcSt.dropPlaceholder}
-            numberOfLines={1}
-          >
-            {service.name || 'Select Service'}
-          </Text>
-          <Text style={[svcSt.dropArrow, ddOpen && svcSt.dropArrowUp]}>▾</Text>
-        </TouchableOpacity>
-
-        <Modal
-          visible={ddOpen}
-          transparent
-          animationType="none"
-          onRequestClose={() => setDdOpen(false)}
-        >
-          <TouchableOpacity
-            style={svcSt.dropBackdrop}
-            activeOpacity={1}
-            onPress={() => setDdOpen(false)}
-          />
-          <View style={[svcSt.dropList, { top: dropPos.y, left: 16, right: 16 }]}>
-            <TouchableOpacity
-              style={[svcSt.dropItem, svcSt.dropItemBorder]}
-              onPress={() => setDdOpen(false)}
-              activeOpacity={0.7}
-            >
-              <Text style={svcSt.dropItemHeader}>Select Service</Text>
-            </TouchableOpacity>
-            <ScrollView
-              style={svcSt.dropScroll}
-              bounces={false}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-            >
-              {GYM_SERVICES.map((s, i) => {
-                const isSelected = service.name === s;
-                return (
-                  <TouchableOpacity
-                    key={s}
-                    style={[
-                      svcSt.dropItem,
-                      i < GYM_SERVICES.length - 1 && svcSt.dropItemBorder,
-                    ]}
-                    onPress={() => { onServiceChange(s); setDdOpen(false); }}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={svcSt.dropCheckPlaceholder}>
-                      {isSelected ? '✓' : ''}
-                    </Text>
-                    <Text style={[svcSt.dropItemText, isSelected && svcSt.dropItemActive]}>
-                      {s}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          </View>
-        </Modal>
-      </View>
-
-      <View style={[svcSt.amtWrap, focused && svcSt.amtWrapFocused]}>
-        <Text style={svcSt.rupee}>₹</Text>
-        <TextInput
-          style={svcSt.amtInput}
-          value={service.amount || '0'}
-          onChangeText={onAmountChange}
-          keyboardType="numeric"
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
-        />
-        <View style={svcSt.stepperCol}>
-          <TouchableOpacity style={svcSt.stepBtn} onPress={increment} activeOpacity={0.7}>
-            <Text style={svcSt.stepArrow}>▲</Text>
-          </TouchableOpacity>
-          <View style={svcSt.stepDivider} />
-          <TouchableOpacity style={svcSt.stepBtn} onPress={decrement} activeOpacity={0.7}>
-            <Text style={svcSt.stepArrow}>▼</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      <TouchableOpacity style={svcSt.deleteBtn} onPress={onRemove} activeOpacity={0.7}>
-        <Text style={svcSt.deleteX}>✕</Text>
-      </TouchableOpacity>
-
-    </View>
-  );
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 6. SERVICES & PRICING SECTION
-// ─────────────────────────────────────────────────────────────────────────────
-
-const ServicesPricingSection = ({ services, setServices }) => {
-
-  const addService = () => {
-    setServices(prev => [...prev, { id: Date.now(), name: '', amount: '0' }]);
-  };
-
-  const updateName = (id, name) => {
-    setServices(prev => prev.map(s => s.id === id ? { ...s, name } : s));
-  };
-
-  const updateAmount = (id, amount) => {
-    setServices(prev => prev.map(s => s.id === id ? { ...s, amount } : s));
-  };
-
-  const removeService = (id) => {
-    setServices(prev => prev.filter(s => s.id !== id));
-  };
-
-  const total = services.reduce((sum, s) => sum + (parseInt(s.amount || '0', 10)), 0);
-
-  return (
-    <SectionCard iconEmoji="💪" iconBg={Colors.dark_icon_bg} title="SERVICES & PRICING">
-      {services.map((svc, idx) => (
-        <ServiceRow
-          key={svc.id}
-          index={idx + 1}
-          service={svc}
-          onServiceChange={(name)  => updateName(svc.id, name)}
-          onAmountChange={(amount) => updateAmount(svc.id, amount)}
-          onRemove={() => removeService(svc.id)}
-        />
-      ))}
-      <TouchableOpacity style={addSvcSt.btn} onPress={addService} activeOpacity={0.7}>
-        <Text style={addSvcSt.text}>＋  Add Service</Text>
-      </TouchableOpacity>
-      {services.length > 0 && (
-        <View style={svcTotalSt.row}>
-          <Text style={svcTotalSt.label}>TOTAL AMOUNT</Text>
-          <Text style={svcTotalSt.value}>₹{total.toLocaleString('en-IN')}</Text>
-        </View>
-      )}
-    </SectionCard>
-  );
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 7. MAIN SCREEN
-// ─────────────────────────────────────────────────────────────────────────────
-
-const NewEnquiryScreen = ({ navigation }) => {
+  // ── Prefill loading state ──────────────────────────────────────────────────
+  const [prefillLoading, setPrefillLoading] = useState(isEditMode);
 
   const [categoryOpen,  setCategoryOpen]  = useState(false);
   const [propertyOpen,  setPropertyOpen]  = useState(false);
@@ -655,6 +568,70 @@ const NewEnquiryScreen = ({ navigation }) => {
   const [specialReq, setSpecialReq] = useState('');
   const [estAmount,  setEstAmount]  = useState('');
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // ── Edit mode: fetch & pre-fill ────────────────────────────────────────────
+  useEffect(() => {
+    if (!isEditMode) return;
+
+    const loadEnquiry = async () => {
+      try {
+        setPrefillLoading(true);
+        const result = await getSingleEnquiry(enquiryId);
+        console.log('📥 getSingleEnquiry =>', JSON.stringify(result, null, 2));
+
+        // API raw data nikalna — pattern tumhare existing safeParseArray jaise
+        let raw = result?.data?.data ?? result?.data ?? result;
+        if (Array.isArray(raw)) raw = raw[0];
+
+        if (!raw) {
+          Alert.alert('Error', 'Enquiry data nahi mila.');
+          return;
+        }
+
+        // ── Category match ─────────────────────────────────────────────────
+        const catLabel = raw.Category ?? raw.category ?? '';
+        const matchedCat = CATEGORIES.find(
+          c => c.label.toLowerCase() === catLabel.toLowerCase()
+        ) ?? null;
+        setSelectedCat(matchedCat);
+
+        // ── Property match ─────────────────────────────────────────────────
+        const propLabel = raw.PropertyName ?? raw.propertyName ?? '';
+        const propList  = matchedCat ? (PROPERTIES[matchedCat.key] || []) : [];
+        const matchedProp = propList.find(
+          p => p.label.toLowerCase() === propLabel.toLowerCase()
+        ) ?? null;
+        setSelectedProp(matchedProp);
+
+        // ── Customer fields ────────────────────────────────────────────────
+        setFullName(raw.FullName   ?? raw.fullName   ?? '');
+        setMobile  (raw.MobileNumber ?? raw.mobileNumber ?? '');
+        setEmail   (raw.EmailId    ?? raw.emailId    ?? '');
+
+        // ── Dates ──────────────────────────────────────────────────────────
+        setCheckIn (formatDateFromApi(raw.CheckInDate  ?? raw.checkInDate  ?? ''));
+        setCheckOut(formatDateFromApi(raw.CheckOutDate ?? raw.checkOutDate ?? ''));
+
+        // ── Guests & amount ────────────────────────────────────────────────
+        setGuests   (String(raw.NoOfGuest        ?? raw.noOfGuest        ?? ''));
+        setAdults   (String(raw.Adults           ?? raw.adults           ?? ''));
+        setChildren (String(raw.Children         ?? raw.children         ?? ''));
+        setEstAmount(String(raw.EstimatedAmount  ?? raw.estimatedAmount  ?? ''));
+        setSpecialReq(raw.SpecialRequests ?? raw.specialRequests ?? '');
+
+      } catch (err) {
+        console.log('❌ loadEnquiry error:', err);
+        Alert.alert('Error', 'Enquiry load karne mein problem aayi.');
+      } finally {
+        setPrefillLoading(false);
+      }
+    };
+
+    loadEnquiry();
+  }, [enquiryId]);
+
+  // ── Handlers ───────────────────────────────────────────────────────────────
   const handleCategorySelect = (cat) => {
     setSelectedCat(cat);
     setSelectedProp(null);
@@ -668,30 +645,118 @@ const NewEnquiryScreen = ({ navigation }) => {
     setPropertyOpen(false);
   };
 
+  // ── Submit: insert OR update ───────────────────────────────────────────────
+  const handleSubmitEnquiry = async () => {
+    if (!fullName.trim() || !mobile.trim()) {
+      Alert.alert('Validation Error', 'Full Name aur Mobile Number zaroori hain');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const enquiryData = {
+        Category:        selectedCat?.label  || '',
+        PropertyName:    selectedProp?.label || '',
+        FullName:        fullName,
+        MobileNumber:    mobile,
+        EmailId:         email,
+        CheckInDate:     formatDateForApi(checkIn),
+        CheckOutDate:    formatDateForApi(checkOut),
+        NoOfGuest:       guests,
+        Adults:          adults,
+        Children:        children,
+        SpecialRequests: specialReq,
+        EstimatedAmount: estAmount,
+      };
+
+      let result;
+
+      if (isEditMode) {
+        // ✅ UPDATE — Id field required
+        const updatePayload = { ...enquiryData, Id: enquiryId };
+        console.log('📦 UPDATE ENQUIRY PAYLOAD =>', JSON.stringify(updatePayload, null, 2));
+        result = await updateEnquiry(updatePayload);
+      } else {
+        // ✅ INSERT — naya enquiry
+        console.log('📦 INSERT ENQUIRY PAYLOAD =>', JSON.stringify(enquiryData, null, 2));
+        result = await insertEnquiry(enquiryData);
+      }
+
+      if (result.success) {
+        Alert.alert(
+          isEditMode ? '✅ Updated' : '✅ Success',
+          isEditMode ? 'Enquiry successfully update ho gayi!' : 'Enquiry successfully submit ho gayi!',
+          [{ text: 'OK', onPress: () => navigation.goBack() }]
+        );
+      } else {
+        Alert.alert('❌ Error', result.message || (isEditMode ? 'Update failed' : 'Submission failed'));
+      }
+    } catch (error) {
+      console.log('❌ Submit Error:', error);
+      Alert.alert('Error', 'Kuch galat ho gaya. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // ── Derived values ─────────────────────────────────────────────────────────
   const catKey       = selectedCat?.key || '';
   const formUnlocked = selectedCat !== null && selectedProp !== null;
-  const submitLabel  = selectedCat ? `Submit ${selectedCat.label} Enquiry` : 'Submit Enquiry';
+  const submitLabel  = isSubmitting
+    ? (isEditMode ? 'Updating...' : 'Submitting...')
+    : isEditMode
+      ? 'Update Enquiry'
+      : selectedCat
+        ? `Submit ${selectedCat.label} Enquiry`
+        : 'Submit Enquiry';
 
+  const activeAvailability =
+    catKey === 'farmhouse' ? FARMHOUSE_AVAILABILITY :
+    catKey === 'airbnb'    ? AIRBNB_AVAILABILITY    :
+    {};
+
+  // ── Prefill loading screen ─────────────────────────────────────────────────
+  if (prefillLoading) {
+    return (
+      <SafeAreaView style={screenSt.safeArea}>
+        <StatusBar backgroundColor={Colors.bg_dark} barStyle="light-content" />
+        <View style={screenSt.header}>
+          <TouchableOpacity style={screenSt.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.8}>
+            <Image source={require('../../Assets/icons/ak.png')} style={screenSt.backIcon} resizeMode="contain" />
+          </TouchableOpacity>
+          <View style={screenSt.headerTitleBlock}>
+            <Text style={screenSt.headerTitle}>Edit Enquiry</Text>
+            <Text style={screenSt.headerSubtitle}>Loading details...</Text>
+          </View>
+          <View style={screenSt.circle1} />
+          <View style={screenSt.goldLine} />
+        </View>
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.page_bg }}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+          <Text style={{ color: Colors.text_grey, marginTop: 14, fontSize: F.f14 }}>
+            Enquiry details load ho rahi hain...
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // ── Main render ────────────────────────────────────────────────────────────
   return (
     <SafeAreaView style={screenSt.safeArea}>
       <StatusBar backgroundColor={Colors.bg_dark} barStyle="light-content" />
 
       {/* HEADER */}
       <View style={screenSt.header}>
-        <TouchableOpacity
-          style={screenSt.backBtn}
-          onPress={() => navigation.goBack()}
-          activeOpacity={0.8}
-        >
-          <Image
-            source={require('../../Assets/icons/ak.png')}
-            style={screenSt.backIcon}
-            resizeMode="contain"
-          />
+        <TouchableOpacity style={screenSt.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.8}>
+          <Image source={require('../../Assets/icons/ak.png')} style={screenSt.backIcon} resizeMode="contain" />
         </TouchableOpacity>
         <View style={screenSt.headerTitleBlock}>
-          <Text style={screenSt.headerTitle}>New Enquiry</Text>
-          <Text style={screenSt.headerSubtitle}>Fill in customer details</Text>
+          {/* ✅ Edit mode mein title change */}
+          <Text style={screenSt.headerTitle}>{isEditMode ? 'Edit Enquiry' : 'New Enquiry'}</Text>
+          <Text style={screenSt.headerSubtitle}>
+            {isEditMode ? 'Details update karo' : 'Fill in customer details'}
+          </Text>
         </View>
         <View style={screenSt.circle1} />
         <View style={screenSt.goldLine} />
@@ -700,7 +765,7 @@ const NewEnquiryScreen = ({ navigation }) => {
       {/* SCROLL BODY */}
       <ScrollView
         style={screenSt.body}
-        contentContainerStyle={screenSt.bodyContent}
+        contentContainerStyle={[screenSt.bodyContent,{ paddingBottom: 70 }]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
@@ -736,8 +801,8 @@ const NewEnquiryScreen = ({ navigation }) => {
           <>
             {/* SECTION 2: CUSTOMER INFO */}
             <SectionCard
-              iconEmoji={CUSTOMER_EMOJI[catKey]}
-              iconBg={CUSTOMER_ICON_BG[catKey]}
+              iconEmoji={CUSTOMER_EMOJI[catKey] || '👤'}
+              iconBg={CUSTOMER_ICON_BG[catKey] || Colors.gold_icon_bg}
               title="CUSTOMER INFORMATION"
             >
               <View>
@@ -760,7 +825,7 @@ const NewEnquiryScreen = ({ navigation }) => {
                 />
               </View>
               <View>
-                <FieldLabel text="EMAIL ID" />
+                <FieldLabel text="EMAIL ID (Optional)" />
                 <FormInput
                   placeholder="Enter email address"
                   value={email}
@@ -783,32 +848,7 @@ const NewEnquiryScreen = ({ navigation }) => {
               )}
             </SectionCard>
 
-            {catKey === 'gym' && (
-              <ServicesPricingSection services={services} setServices={setServices} />
-            )}
-
-            {catKey === 'gym' && (
-              <SectionCard iconEmoji="📅" iconBg={Colors.dark_icon_bg} title="SUBSCRIPTION DURATION">
-                <DurationChips value={duration} onChange={setDuration} />
-                <View>
-                  <FieldLabel text="EXPECTED JOINING DATE" />
-                  <DateInput value={joinDate} onChange={setJoinDate} />
-                </View>
-              </SectionCard>
-            )}
-
-            {catKey === 'gym' && (
-              <SectionCard iconEmoji="📝" iconBg={Colors.dark_icon_bg} title="ADDITIONAL NOTES">
-                <FormInput
-                  placeholder="Special requirements, remarks or follow-up notes..."
-                  value={notes}
-                  onChangeText={setNotes}
-                  multiline
-                  numberOfLines={4}
-                />
-              </SectionCard>
-            )}
-
+            {/* ── FARMHOUSE BOOKING ──────────────────────────────────────── */}
             {catKey === 'farmhouse' && (
               <SectionCard iconEmoji="📅" iconBg={Colors.gold_icon_bg} title="BOOKING DETAILS">
                 <DateRow
@@ -818,6 +858,7 @@ const NewEnquiryScreen = ({ navigation }) => {
                   rightVal={checkOut}
                   onLeftChange={setCheckIn}
                   onRightChange={setCheckOut}
+                  availability={activeAvailability}
                 />
                 <View>
                   <FieldLabel text="NO. OF GUESTS" />
@@ -836,6 +877,7 @@ const NewEnquiryScreen = ({ navigation }) => {
               </SectionCard>
             )}
 
+            {/* ── AIRBNB STAY ────────────────────────────────────────────── */}
             {catKey === 'airbnb' && (
               <SectionCard iconEmoji="📅" iconBg={Colors.gold_icon_bg} title="STAY DETAILS">
                 <DateRow
@@ -845,7 +887,18 @@ const NewEnquiryScreen = ({ navigation }) => {
                   rightVal={checkOut}
                   onLeftChange={setCheckIn}
                   onRightChange={setCheckOut}
+                  availability={activeAvailability}
                 />
+                <View>
+                  <FieldLabel text="NO. OF GUESTS" />
+                  <FormInput
+                    placeholder="Number of guests"
+                    value={guests}
+                    onChangeText={setGuests}
+                    icon={require('../../Assets/icons/members.png')}
+                    keyboardType="numeric"
+                  />
+                </View>
                 <View style={{ flexDirection: 'row', gap: 10 }}>
                   <View style={{ flex: 1 }}>
                     <FieldLabel text="ADULTS" />
@@ -875,9 +928,13 @@ const NewEnquiryScreen = ({ navigation }) => {
               </SectionCard>
             )}
 
-            {/* ── SUBMIT BUTTON ─────────────────────────────────────────── */}
-            <TouchableOpacity style={screenSt.submitBtn} activeOpacity={0.85} onPress={() => {}}>
-              {/* ✅ Image icon instead of Text tick */}
+            {/* ── SUBMIT ─────────────────────────────────────────────────── */}
+            <TouchableOpacity
+              style={[screenSt.submitBtn, isSubmitting && screenSt.submitBtnDisabled]}
+              activeOpacity={0.85}
+              onPress={handleSubmitEnquiry}
+              disabled={isSubmitting}
+            >
               <Image
                 source={require('../../Assets/icons/check.png')}
                 style={screenSt.submitCheckIcon}
@@ -885,7 +942,6 @@ const NewEnquiryScreen = ({ navigation }) => {
               />
               <Text style={screenSt.submitText}>{submitLabel}</Text>
             </TouchableOpacity>
-
           </>
         )}
       </ScrollView>
@@ -896,747 +952,186 @@ const NewEnquiryScreen = ({ navigation }) => {
 export default NewEnquiryScreen;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 8. STYLESHEETS
+// 10. STYLESHEETS  (unchanged from original)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const screenSt = StyleSheet.create({
-  safeArea: {
-    flex:            1,
-    backgroundColor: Colors.page_bg,
-  },
+  safeArea: { flex: 1, backgroundColor: Colors.bg_dark },
   header: {
-    backgroundColor:   Colors.bg_dark,
-    paddingHorizontal: 20,
-    paddingTop:        8,
-    paddingBottom:     24,
-    flexDirection:     'row',
-    alignItems:        'center',
-    overflow:          'hidden',
-    marginTop: 27,
+    backgroundColor: Colors.bg_dark, paddingHorizontal: 20,
+    paddingTop: 8, paddingBottom: 24,
+    flexDirection: 'row', alignItems: 'center',
+    overflow: 'hidden', marginTop: 27,
   },
   backBtn: {
-    width:           40,
-    height:          40,
-    borderRadius:    12,
+    width: 40, height: 40, borderRadius: 12,
     backgroundColor: 'rgba(255,255,255,0.10)',
-    alignItems:      'center',
-    justifyContent:  'center',
-    marginRight:     14,
-    zIndex:          2,
+    alignItems: 'center', justifyContent: 'center',
+    marginRight: 14, zIndex: 2,
   },
-  backIcon: {
-    width:     18,
-    height:    18,
-    tintColor: Colors.text_white,
-  },
-  headerTitleBlock: {
-    flex:   1,
-    zIndex: 2,
-  },
-  headerTitle: {
-    color:        Colors.text_white,
-    fontSize:     F.f18,
-    fontWeight:   'bold',
-    marginBottom: 3,
-  },
-  headerSubtitle: {
-    color:    Colors.text_grey,
-    fontSize: F.f13,
-  },
+  backIcon:         { width: 18, height: 18, tintColor: Colors.text_white },
+  headerTitleBlock: { flex: 1, zIndex: 2 },
+  headerTitle:      { color: Colors.text_white, fontSize: F.f18, fontWeight: 'bold', marginBottom: 3 },
+  headerSubtitle:   { color: Colors.text_grey, fontSize: F.f13 },
   circle1: {
-    position:        'absolute',
-    width:           140,
-    height:          140,
-    borderRadius:    110,
-    backgroundColor: Colors.bg_dark,
-    top:             -30,
-    right:           -40,
-    borderColor:     'rgba(202, 156, 41, 0.12)',
-    borderWidth:     25,
+    position: 'absolute', width: 140, height: 140, borderRadius: 110,
+    backgroundColor: Colors.bg_dark, top: -30, right: -40,
+    borderColor: 'rgba(202,156,41,0.12)', borderWidth: 25,
   },
-  goldLine: {
-    position:        'absolute',
-    bottom:          0,
-    left:            0,
-    right:           0,
-    height:          3,
-    backgroundColor: Colors.primary,
-  },
-  body: {
-    flex:            1,
-    backgroundColor: Colors.page_bg,
-  },
-  bodyContent: {
-    paddingHorizontal: 14,
-    paddingTop:        18,
-    paddingBottom:     30,
-  },
+  goldLine: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 3, backgroundColor: Colors.primary },
+  body:        { flex: 1, backgroundColor: Colors.page_bg },
+  bodyContent: { paddingHorizontal: 14, paddingTop: 18, paddingBottom: 30, gap: 12 },
   submitBtn: {
-    backgroundColor: Colors.bg_dark,
-    borderRadius:    14,
-    flexDirection:   'row',
-    alignItems:      'center',
-    justifyContent:  'center',
-    paddingVertical: 18,
-    marginTop:       6,
-    gap:             10,
+    backgroundColor: Colors.bg_dark, borderRadius: 14,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 18, marginTop: 6, gap: 10,
   },
-  // ✅ CHANGED: submitCheck (Text) → submitCheckIcon (Image)
-  submitCheckIcon: {
-    width:     22,
-    height:    22,
-    tintColor: Colors.primary,
-  },
-  submitText: {
-    color:         Colors.text_white,
-    fontSize:      F.f16,
-    fontWeight:    '700',
-    letterSpacing: 0.3,
-  },
+  submitBtnDisabled: { opacity: 0.6 },
+  submitCheckIcon:   { width: 22, height: 22, tintColor: Colors.primary },
+  submitText:        { color: Colors.text_white, fontSize: F.f16, fontWeight: '700', letterSpacing: 0.3 },
 });
 
 const sectionCardSt = StyleSheet.create({
   card: {
-    backgroundColor: Colors.card_bg,
-    borderRadius:    16,
-    marginBottom:    14,
+    backgroundColor: Colors.card_bg, borderRadius: 16, marginBottom: 14,
     ...Platform.select({
-      ios: {
-        shadowColor:   '#B0B8C8',
-        shadowOffset:  { width: 0, height: 2 },
-        shadowOpacity: 0.13,
-        shadowRadius:  8,
-      },
+      ios:     { shadowColor: '#B0B8C8', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.13, shadowRadius: 8 },
       android: { elevation: 3 },
     }),
   },
   headerRow: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    paddingHorizontal: 14,
-    paddingTop:        14,
-    paddingBottom:     10,
-    gap:               10,
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 14, paddingTop: 14, paddingBottom: 10, gap: 10,
   },
-  iconBox: {
-    width:          35,
-    height:         35,
-    borderRadius:   12,
-    alignItems:     'center',
-    justifyContent: 'center',
-  },
-  iconEmoji: {
-    fontSize: 15,
-  },
-  title: {
-    color:         Colors.text_dark,
-    fontSize:      F.f13,
-    fontWeight:    '800',
-    letterSpacing: 1,
-  },
-  dividerLine: {
-    flex:            1,
-    height:          1,
-    backgroundColor: Colors.divider,
-    marginLeft:      4,
-  },
-  content: {
-    paddingHorizontal: 14,
-    paddingBottom:     16,
-    gap:               14,
-  },
+  iconBox:     { width: 35, height: 35, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  iconEmoji:   { fontSize: 15 },
+  title:       { color: Colors.text_dark, fontSize: F.f13, fontWeight: '800', letterSpacing: 1 },
+  dividerLine: { flex: 1, height: 1, backgroundColor: Colors.divider, marginLeft: 4 },
+  content:     { paddingHorizontal: 14, paddingBottom: 16, gap: 14 },
 });
 
 const fieldLabelSt = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems:    'center',
-    gap:           5,
-    marginBottom:  6,
-  },
-  dot: {
-    width:           4,
-    height:          4,
-    borderRadius:    3,
-    backgroundColor: Colors.primary,
-  },
-  text: {
-    color:         Colors.text_label,
-    fontSize:      F.f11,
-    fontWeight:    '700',
-    letterSpacing: 0.8,
-  },
+  row:  { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 6 },
+  dot:  { width: 4, height: 4, borderRadius: 3, backgroundColor: Colors.primary },
+  text: { color: Colors.text_label, fontSize: F.f11, fontWeight: '700', letterSpacing: 0.8 },
 });
 
 const inputSt = StyleSheet.create({
   wrapper: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    backgroundColor:   Colors.inputBgColor,
-    borderRadius:      12,
-    borderWidth:       1.5,
-    borderColor:       Colors.inputBorder,
-    paddingHorizontal: 12,
-    minHeight:         52,
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: Colors.inputBgColor, borderRadius: 12,
+    borderWidth: 1.5, borderColor: Colors.inputBorder,
+    paddingHorizontal: 12, minHeight: 52,
   },
-  wrapperFocused: {
-    borderColor:     Colors.primary,
-    backgroundColor: '#FFFDF5',
-  },
-  wrapperMultiline: {
-    alignItems:      'flex-start',
-    paddingVertical: 12,
-    minHeight:       100,
-  },
-  icon: {
-    width:       18,
-    height:      18,
-    tintColor:   Colors.inputIcon,
-    marginRight: 10,
-  },
-  calIcon: {
-    width:     18,
-    height:    18,
-    tintColor: Colors.bg_dark,
-  },
-  input: {
-    flex:     1,
-    color:    Colors.text_dark,
-    fontSize: F.f14,
-    padding:  0,
-  },
-  inputMultiline: {
-    textAlignVertical: 'top',
-    lineHeight:        20,
-  },
+  wrapperFocused:  { borderColor: Colors.primary, backgroundColor: '#FFFDF5' },
+  wrapperMultiline:{ alignItems: 'flex-start', paddingVertical: 12, minHeight: 100 },
+  icon:    { width: 18, height: 18, tintColor: Colors.inputIcon, marginRight: 10 },
+  calIcon: { width: 18, height: 18, tintColor: Colors.bg_dark },
+  input:          { flex: 1, color: Colors.text_dark, fontSize: F.f14, padding: 0 },
+  inputMultiline: { textAlignVertical: 'top', lineHeight: 20 },
 });
 
 const amtSt = StyleSheet.create({
-  wrapperOverride: {
-    paddingHorizontal: 0,
-  },
+  wrapperOverride: { paddingHorizontal: 0 },
   prefix: {
-    width:                  44,
-    alignSelf:              'stretch',
-    backgroundColor:        '#FFF8E6',
-    borderTopLeftRadius:    10,
-    borderBottomLeftRadius: 10,
-    alignItems:             'center',
-    justifyContent:         'center',
-    borderRightWidth:       1,
-    borderRightColor:       Colors.inputBorder,
+    width: 44, alignSelf: 'stretch',
+    backgroundColor: '#FFF8E6',
+    borderTopLeftRadius: 10, borderBottomLeftRadius: 10,
+    alignItems: 'center', justifyContent: 'center',
+    borderRightWidth: 1, borderRightColor: Colors.inputBorder,
   },
-  symbol: {
-    color:      Colors.primary,
-    fontSize:   F.f18,
-    fontWeight: '700',
-  },
-  inputOverride: {
-    paddingHorizontal: 12,
-  },
+  symbol:        { color: Colors.primary, fontSize: F.f18, fontWeight: '700' },
+  inputOverride: { paddingHorizontal: 12 },
 });
 
 const dropSt = StyleSheet.create({
   trigger: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    justifyContent:    'space-between',
-    backgroundColor:   Colors.inputBgColor,
-    borderRadius:      12,
-    borderWidth:       1.5,
-    borderColor:       Colors.inputBorder,
-    paddingHorizontal: 14,
-    height:            52,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: Colors.inputBgColor, borderRadius: 12,
+    borderWidth: 1.5, borderColor: Colors.inputBorder,
+    paddingHorizontal: 14, height: 52,
   },
-  triggerOpen: {
-    borderColor:             Colors.primary,
-    borderBottomLeftRadius:  0,
-    borderBottomRightRadius: 0,
-  },
-  placeholder: {
-    color:    Colors.text_grey,
-    fontSize: F.f14,
-  },
-  selectedText: {
-    color:      Colors.text_dark,
-    fontSize:   F.f15,
-    fontWeight: '700',
-  },
-  arrow: {
-    color:    Colors.text_grey,
-    fontSize: F.f12,
-  },
-  arrowUp: {
-    transform: [{ rotate: '180deg' }],
-  },
+  triggerOpen:  { borderColor: Colors.primary, borderBottomLeftRadius: 0, borderBottomRightRadius: 0 },
+  placeholder:  { color: Colors.text_grey, fontSize: F.f14 },
+  selectedText: { color: Colors.text_dark, fontSize: F.f15, fontWeight: '700' },
+  arrow:        { color: Colors.text_grey, fontSize: F.f12 },
+  arrowUp:      { transform: [{ rotate: '180deg' }] },
   list: {
-    backgroundColor:         Colors.card_bg,
-    borderTopLeftRadius:     0,
-    borderTopRightRadius:    0,
-    borderBottomLeftRadius:  12,
-    borderBottomRightRadius: 12,
-    borderWidth:             1.5,
-    borderColor:             Colors.primary,
-    borderTopWidth:          0,
-    overflow:                'hidden',
+    backgroundColor: Colors.card_bg,
+    borderTopLeftRadius: 0, borderTopRightRadius: 0,
+    borderBottomLeftRadius: 12, borderBottomRightRadius: 12,
+    borderWidth: 1.5, borderColor: Colors.primary, borderTopWidth: 0,
+    overflow: 'hidden',
     ...Platform.select({
-      ios: {
-        shadowColor:   '#000',
-        shadowOffset:  { width: 0, height: 4 },
-        shadowOpacity: 0.1,
-        shadowRadius:  8,
-      },
+      ios:     { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 8 },
       android: { elevation: 6 },
     }),
   },
-  item: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    paddingHorizontal: 14,
-    paddingVertical:   14,
-    gap:               12,
-  },
-  itemBorder: {
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.divider,
-  },
-  itemEmoji: {
-    fontSize: 22,
-  },
-  itemLabel: {
-    flex:       1,
-    color:      Colors.text_dark,
-    fontSize:   F.f15,
-    fontWeight: '700',
-  },
-  itemBadge: {
-    color:      Colors.text_label,
-    fontSize:   F.f13,
-    fontWeight: '500',
-  },
+  item:      { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 14, gap: 12 },
+  itemBorder:{ borderBottomWidth: 1, borderBottomColor: Colors.divider },
+  itemEmoji: { fontSize: 22 },
+  itemLabel: { flex: 1, color: Colors.text_dark, fontSize: F.f15, fontWeight: '700' },
+  itemBadge: { color: Colors.text_label, fontSize: F.f13, fontWeight: '500' },
 });
 
 const genderSt = StyleSheet.create({
-  container: {
-    flexDirection:   'row',
-    backgroundColor: Colors.gender_bg,
-    borderRadius:    12,
-    padding:         4,
-    gap:             4,
-  },
-  btn: {
-    flex:            1,
-    paddingVertical: 10,
-    borderRadius:    9,
-    alignItems:      'center',
-  },
+  container: { flexDirection: 'row', backgroundColor: Colors.gender_bg, borderRadius: 12, padding: 4, gap: 4 },
+  btn:       { flex: 1, paddingVertical: 10, borderRadius: 9, alignItems: 'center' },
   btnActive: {
     backgroundColor: Colors.card_bg,
     ...Platform.select({
-      ios: {
-        shadowColor:   '#888',
-        shadowOffset:  { width: 0, height: 1 },
-        shadowOpacity: 0.15,
-        shadowRadius:  4,
-      },
+      ios:     { shadowColor: '#888', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.15, shadowRadius: 4 },
       android: { elevation: 2 },
     }),
   },
-  label: {
-    color:      Colors.text_grey,
-    fontSize:   F.f14,
-    fontWeight: '500',
-  },
-  labelActive: {
-    color:      Colors.text_dark,
-    fontWeight: '700',
-  },
+  label:       { color: Colors.text_grey, fontSize: F.f14, fontWeight: '500' },
+  labelActive: { color: Colors.text_dark, fontWeight: '700' },
 });
 
 const chipSt = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    gap:           10,
-    marginTop:     12,
-  },
-  chip: {
-    flex:            1,
-    backgroundColor: Colors.chip_bg,
-    borderRadius:    12,
-    paddingVertical: 10,
-    alignItems:      'center',
-    borderWidth:     1.5,
-    borderColor:     Colors.inputBorder,
-  },
-  chipActive: {
-    backgroundColor: '#f6f0c7',
-    borderColor:     Colors.chip_active_bg,
-  },
-  num: {
-    color:      Colors.text_dark,
-    fontSize:   F.f22,
-    fontWeight: '800',
-    lineHeight: 26,
-  },
-  numActive: {
-    color: Colors.text_dark,
-  },
-  sub: {
-    color:         Colors.text_grey,
-    fontSize:      F.f11,
-    fontWeight:    '600',
-    letterSpacing: 0.4,
-    marginTop:     2,
-  },
-  subActive: {
-    color: '#94A3B8',
-  },
-});
-
-const addSvcSt = StyleSheet.create({
-  btn: {
-    borderWidth:     1.5,
-    borderColor:     Colors.divider,
-    borderStyle:     'dashed',
-    borderRadius:    12,
-    paddingVertical: 16,
-    alignItems:      'center',
-  },
-  text: {
-    color:         Colors.text_grey,
-    fontSize:      F.f14,
-    fontWeight:    '500',
-    letterSpacing: 0.2,
-  },
-});
-
-const svcSt = StyleSheet.create({
-  row: {
-    flexDirection:   'row',
-    alignItems:      'center',
-    gap:             8,
-    backgroundColor: '#FFFDF5',
-    borderRadius:    14,
-    borderWidth:     1.5,
-    borderColor:     Colors.primary,
-    padding:         10,
-  },
-  indexBadge: {
-    width:           28,
-    height:          28,
-    borderRadius:    8,
-    backgroundColor: Colors.bg_dark,
-    alignItems:      'center',
-    justifyContent:  'center',
-  },
-  indexText: {
-    color:      Colors.text_white,
-    fontSize:   F.f13,
-    fontWeight: '700',
-  },
-  dropWrap: {
-    flex:     1,
-    position: 'relative',
-  },
-  dropTrigger: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    backgroundColor:   Colors.card_bg,
-    borderRadius:      10,
-    borderWidth:       1.5,
-    borderColor:       Colors.inputBorder,
-    paddingHorizontal: 10,
-    height:            40,
-  },
-  dropTriggerOpen: {
-    borderColor:             Colors.primary,
-    borderBottomLeftRadius:  0,
-    borderBottomRightRadius: 0,
-  },
-  dropPlaceholder: {
-    flex:     1,
-    color:    Colors.text_grey,
-    fontSize: F.f13,
-  },
-  dropSelected: {
-    flex:       1,
-    color:      Colors.text_dark,
-    fontSize:   F.f13,
-    fontWeight: '600',
-  },
-  dropArrow: {
-    color:    Colors.text_grey,
-    fontSize: F.f11,
-  },
-  dropArrowUp: {
-    transform: [{ rotate: '180deg' }],
-  },
-  dropBackdrop: {
-    position: 'absolute',
-    top:      0,
-    left:     0,
-    right:    0,
-    bottom:   0,
-  },
-  dropList: {
-    position:        'absolute',
-    backgroundColor: '#EFEFEF',
-    borderRadius:    12,
-    overflow:        'hidden',
-    maxHeight:       380,
-    width:           140,
-    marginLeft:      50,
-    ...Platform.select({
-      ios: {
-        shadowColor:   '#000',
-        shadowOffset:  { width: 0, height: 6 },
-        shadowOpacity: 0.18,
-        shadowRadius:  14,
-      },
-      android: { elevation: 12 },
-    }),
-  },
-  dropItem: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    paddingHorizontal: 16,
-    paddingVertical:   10,
-    gap:               4,
-  },
-  dropItemBorder: {
-    borderBottomWidth: 0.5,
-    borderBottomColor: 'rgba(0,0,0,0.10)',
-  },
-  dropItemHeader: {
-    color:      Colors.text_dark,
-    fontSize:   F.f12,
-    fontWeight: '500',
-    marginLeft: 12,
-  },
-  dropCheckPlaceholder: {
-    width:      15,
-    color:      Colors.text_dark,
-    fontSize:   F.f12,
-    fontWeight: '600',
-    textAlign:  'center',
-  },
-  dropItemText: {
-    color:      Colors.text_dark,
-    fontSize:   F.f12,
-    fontWeight: '600',
-  },
-  dropItemActive: {
-    fontWeight: '500',
-  },
-  dropScroll: {
-    maxHeight: 320,
-  },
-  amtWrap: {
-    flexDirection:   'row',
-    alignItems:      'center',
-    backgroundColor: Colors.card_bg,
-    borderRadius:    10,
-    borderWidth:     1.5,
-    borderColor:     Colors.inputBorder,
-    height:          40,
-    overflow:        'hidden',
-    width:           80,
-  },
-  amtWrapFocused: {
-    borderColor: Colors.primary,
-  },
-  rupee: {
-    color:       Colors.primary,
-    fontSize:    F.f15,
-    fontWeight:  '700',
-    paddingLeft: 8,
-  },
-  amtInput: {
-    flex:              1,
-    color:             Colors.text_dark,
-    fontSize:          F.f14,
-    fontWeight:        '600',
-    paddingHorizontal: 6,
-    padding:           0,
-  },
-  stepperCol: {
-    borderLeftWidth:  1,
-    borderLeftColor:  Colors.inputBorder,
-    height:           '100%',
-    justifyContent:   'center',
-    backgroundColor:  '#F8F9FB',
-  },
-  stepBtn: {
-    paddingHorizontal: 7,
-    paddingVertical:   4,
-  },
-  stepDivider: {
-    height:          1,
-    backgroundColor: Colors.inputBorder,
-  },
-  stepArrow: {
-    color:    Colors.text_grey,
-    fontSize: 8,
-  },
-  deleteBtn: {
-    width:           32,
-    height:          32,
-    borderRadius:    8,
-    backgroundColor: Colors.red_bg,
-    alignItems:      'center',
-    justifyContent:  'center',
-  },
-  deleteX: {
-    color:      Colors.red_text,
-    fontSize:   F.f13,
-    fontWeight: '700',
-  },
-});
-
-const svcTotalSt = StyleSheet.create({
-  row: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    justifyContent:    'space-between',
-    backgroundColor:   '#FFF8E6',
-    borderRadius:      12,
-    paddingHorizontal: 16,
-    paddingVertical:   14,
-    borderWidth:       1,
-    borderColor:       '#F3D99A',
-  },
-  label: {
-    color:         Colors.text_label,
-    fontSize:      F.f12,
-    fontWeight:    '700',
-    letterSpacing: 0.8,
-  },
-  value: {
-    color:      Colors.text_dark,
-    fontSize:   F.f20,
-    fontWeight: '800',
-  },
+  row:       { flexDirection: 'row', gap: 10, marginTop: 12 },
+  chip:      { flex: 1, backgroundColor: Colors.chip_bg, borderRadius: 12, paddingVertical: 10, alignItems: 'center', borderWidth: 1.5, borderColor: Colors.inputBorder },
+  chipActive:{ backgroundColor: '#f6f0c7', borderColor: Colors.chip_active_bg },
+  num:       { color: Colors.text_dark, fontSize: F.f22, fontWeight: '800', lineHeight: 26 },
+  numActive: { color: Colors.text_dark },
+  sub:       { color: Colors.text_grey, fontSize: F.f11, fontWeight: '600', letterSpacing: 0.4, marginTop: 2 },
+  subActive: { color: '#94A3B8' },
 });
 
 const calSt = StyleSheet.create({
-  backdrop: {
-    position:        'absolute',
-    top:             0,
-    left:            0,
-    right:           0,
-    bottom:          0,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-  },
+  backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.35)' },
   card: {
-    position:        'absolute',
-    top:             '20%',
-    alignSelf:       'center',
-    width:           300,
-    backgroundColor: Colors.card_bg,
-    borderRadius:    18,
-    padding:         20,
+    position: 'absolute', top: '20%', alignSelf: 'center',
+    width: 300, backgroundColor: Colors.card_bg, borderRadius: 18, padding: 20,
     ...Platform.select({
-      ios: {
-        shadowColor:   '#000',
-        shadowOffset:  { width: 0, height: 8 },
-        shadowOpacity: 0.18,
-        shadowRadius:  20,
-      },
+      ios:     { shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.18, shadowRadius: 20 },
       android: { elevation: 14 },
     }),
   },
-  headerRow: {
-    flexDirection:  'row',
-    alignItems:     'center',
-    justifyContent: 'space-between',
-    marginBottom:   18,
-  },
-  monthBtn: {
-    flexDirection: 'row',
-    alignItems:    'center',
-    gap:           6,
-  },
-  monthText: {
-    color:      Colors.text_dark,
-    fontSize:   F.f16,
-    fontWeight: '700',
-  },
-  monthArrow: {
-    color:    Colors.text_grey,
-    fontSize: F.f12,
-  },
-  navBtns: {
-    flexDirection: 'row',
-    gap:           16,
-  },
-  navBtn: {
-    padding: 4,
-  },
-  navArrow: {
-    color:      Colors.text_dark,
-    fontSize:   F.f18,
-    fontWeight: '300',
-  },
-  dayLabelRow: {
-    flexDirection:  'row',
-    justifyContent: 'space-around',
-    marginBottom:   8,
-  },
-  dayLabel: {
-    width:      32,
-    textAlign:  'center',
-    color:      Colors.text_grey,
-    fontSize:   F.f13,
-    fontWeight: '600',
-  },
-  grid: {
-    flexDirection:  'row',
-    flexWrap:       'wrap',
-    justifyContent: 'space-around',
-    rowGap:         4,
-  },
-  cell: {
-    width:          32,
-    height:         36,
-    alignItems:     'center',
-    justifyContent: 'center',
-    borderRadius:   8,
-  },
-  cellSelected: {
-    backgroundColor: '#1D6AFF',
-    borderRadius:    10,
-  },
-  cellText: {
-    color:    Colors.text_dark,
-    fontSize: F.f14,
-  },
-  cellTextOther: {
-    color: Colors.text_grey,
-  },
-  cellTextToday: {
-    color:      '#1D6AFF',
-    fontWeight: '700',
-  },
-  cellTextSel: {
-    color:      '#FFFFFF',
-    fontWeight: '700',
-  },
-  footer: {
-    flexDirection:  'row',
-    justifyContent: 'space-between',
-    marginTop:      18,
-    paddingTop:     14,
-    borderTopWidth: 1,
-    borderColor:    Colors.inputBorder,
-  },
-  footerClear: {
-    color:      '#1D6AFF',
-    fontSize:   F.f14,
-    fontWeight: '600',
-  },
-  footerToday: {
-    color:      '#1D6AFF',
-    fontSize:   F.f14,
-    fontWeight: '600',
-  },
+  headerRow:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 },
+  monthBtn:    { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  monthText:   { color: Colors.text_dark, fontSize: F.f16, fontWeight: '700' },
+  monthArrow:  { color: Colors.text_grey, fontSize: F.f12 },
+  navBtns:     { flexDirection: 'row', gap: 16 },
+  navBtn:      { padding: 4 },
+  navArrow:    { color: Colors.text_dark, fontSize: F.f18, fontWeight: '300' },
+  dayLabelRow: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 8 },
+  dayLabel:    { width: 32, textAlign: 'center', color: Colors.text_grey, fontSize: F.f13, fontWeight: '600' },
+  grid:        { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-around', rowGap: 4 },
+  cell:        { width: 32, height: 42, alignItems: 'center', justifyContent: 'flex-start', borderRadius: 8, paddingTop: 5, gap: 3 },
+  cellSelected:  { backgroundColor: '#1D6AFF', borderRadius: 10 },
+  cellText:      { color: Colors.text_dark, fontSize: F.f14 },
+  cellTextOther: { color: Colors.text_grey },
+  cellTextToday: { color: '#1D6AFF', fontWeight: '700' },
+  cellTextSel:   { color: '#FFFFFF', fontWeight: '700' },
+  cellTextSold:  { color: '#EF4444', opacity: 0.7 },
+  cellSoldOut:   { backgroundColor: 'rgba(239,68,68,0.07)', borderRadius: 8 },
+  dot:           { width: 6, height: 6, borderRadius: 3 },
+  legend:      { flexDirection: 'row', justifyContent: 'center', gap: 20, marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderColor: Colors.inputBorder },
+  legendItem:  { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  legendDot:   { width: 8, height: 8, borderRadius: 4 },
+  legendText:  { color: Colors.text_label, fontSize: F.f11, fontWeight: '600' },
+  footer:      { flexDirection: 'row', justifyContent: 'space-between', marginTop: 14, paddingTop: 14, borderTopWidth: 1, borderColor: Colors.inputBorder },
+  footerClear: { color: '#1D6AFF', fontSize: F.f14, fontWeight: '600' },
+  footerToday: { color: '#1D6AFF', fontSize: F.f14, fontWeight: '600' },
 });
