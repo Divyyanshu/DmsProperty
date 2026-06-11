@@ -17,6 +17,7 @@ import TotalExpensesScreen from '../Screens/DmsDashboard/TotalExpensesScreen';
 import TotalRevnueScreen from '../Screens/DmsDashboard/TotalRevnueScreen';
 import TotalEnquiryScreen from '../Screens/DmsDashboard/TotalEnquiryScreen';
 import CheckinDetailsScreen from '../Screens/DmsDashboard/CheckinDetailsScreen';
+import UsersDetailsScreen from '../Screens/DmsDashboard/UsersDetailsScreen';
 
 
 
@@ -82,36 +83,40 @@ export default function AppNavigator() {
           component={SubscriptionRecords}
         />
 
-      
+
         <Stack.Screen
           name="ExpensesScreen"
-          component={ExpensesScreen }
+          component={ExpensesScreen}
         />
 
-           <Stack.Screen
+        <Stack.Screen
           name="NewBookingScreen"
           component={NewBookingScreen}
         />
 
-          <Stack.Screen
+        <Stack.Screen
           name="TotalExpensesScreen"
-          component={TotalExpensesScreen }
+          component={TotalExpensesScreen}
         />
-          
-          <Stack.Screen
-           name="TotalRevnueScreen"
-           component={TotalRevnueScreen}
-          />
 
-            <Stack.Screen
-           name="TotalEnquiryScreen"
-           component={TotalEnquiryScreen}
-          />
+        <Stack.Screen
+          name="TotalRevnueScreen"
+          component={TotalRevnueScreen}
+        />
 
-            <Stack.Screen
-           name="CheckinDetailsScreen"
-           component={CheckinDetailsScreen}
-          />
+        <Stack.Screen
+          name="TotalEnquiryScreen"
+          component={TotalEnquiryScreen}
+        />
+
+        <Stack.Screen
+          name="CheckinDetailsScreen"
+          component={CheckinDetailsScreen}
+        />
+        <Stack.Screen
+          name="UsersDetailsScreen"
+          component={UsersDetailsScreen}
+        />
 
       </Stack.Navigator>
     </NavigationContainer>

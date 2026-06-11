@@ -172,6 +172,7 @@ export const getNewBookings = async () => {
         children:      item.Children      || "",
         specialReq:    item.SpecialRequest|| "",
         email:         item.EmailId       || "",
+        BookingStatus: item.BookingStatus || "Confirmed",
       };
     });
 
@@ -830,3 +831,33 @@ export const updateEnquiry = async (enquiryData) => {
     };
   }
 };
+
+// ======================================================
+// UPLOAD GUEST IDS
+// ======================================================
+
+export const uploadGuestIds = async (formData) => {
+  try {
+    const response = await AxiosClient.post(
+      ENDPOINTS.UPLOAD_GUEST_IDS,
+      formData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          'Accept': 'application/json',
+        },
+      }
+    );
+    return { success: true, data: response.data };
+
+  } catch (error) {
+    return {
+      success: false,
+      message:
+        error.response?.data?.message ||
+        error.response?.data?.Message ||
+        "Upload failed",
+    };
+  }
+};
+

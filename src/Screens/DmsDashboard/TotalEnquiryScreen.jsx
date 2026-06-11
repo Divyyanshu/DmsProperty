@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import {
   ActivityIndicator,
   TouchableWithoutFeedback,
   Keyboard,
+  TextInput,
 } from 'react-native';
 import { getEnquiries } from '../../Api/ApiService';
 
@@ -40,7 +41,6 @@ const Colors = {
   border_light:   '#E0F2F1',
   border_white:   'rgba(255,255,255,0.12)',
   strip_bg:       'rgba(255,255,255,0.08)',
-  icon_cyan:      '#CFFAFE',
   warn_bg:        '#FEF9C3',
   warn_text:      '#92400E',
   warn_border:    '#FDE68A',
@@ -54,31 +54,19 @@ const Colors = {
 
 const F = {
   f10: 10, f11: 11, f12: 12, f13: 13,
-  f14: 14, f15: 15, f16: 16, f17: 17, f18: 18, f20: 20, f22: 22, f24: 24,
+  f14: 14, f15: 15, f16: 16, f17: 17, f18: 18, f20: 20,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 2. STATIC CONFIG
+// 2. PERIOD OPTIONS
 // ─────────────────────────────────────────────────────────────────────────────
 
 const PERIOD_OPTIONS = [
-  { key: 'Today', label: 'Today' },
+  { key: 'Today',     label: 'Today'     },
   { key: 'Yesterday', label: 'Yesterday' },
-  { key: 'monthly', label: 'Monthly' },
-  { key: 'yearly',  label: 'Yearly'  },
+  { key: 'monthly',   label: 'Monthly'   },
+  { key: 'yearly',    label: 'Yearly'    },
 ];
-
-const PROPERTY_ICON_MAP = {
-  'Farmhouse':  require('../../Assets/icons/Greystone.png'),
-  'Airbnb':     require('../../Assets/icons/stonestays1.png'),
-  'Grey Stone': require('../../Assets/icons/Greystone.png'),
-  'SkyStone':   require('../../Assets/icons/stonestays1.png'),
-  'Topaz':      require('../../Assets/icons/Greystone.png'),
-  'default':    require('../../Assets/icons/Greystone.png'),
-};
-
-const getPropertyIcon = (name) =>
-  PROPERTY_ICON_MAP[name] ?? PROPERTY_ICON_MAP['default'];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 3. HELPERS
@@ -86,98 +74,78 @@ const getPropertyIcon = (name) =>
 
 const safeStr = (val) => (val != null ? String(val) : '');
 
-// Status ko safely lowercase mein nikalo — Status ya status dono handle karo
 const getStatus = (item) =>
-  safeStr(item.Status ?? item.status ?? '').toLowerCase().trim();
+  safeStr(item.Status ?? item.status ?? item.EnquiryStatus ?? '').toLowerCase().trim();
 
-// PropertyName ko safely nikalo
 const getPropName = (item) =>
   safeStr(
-    item.PropertyName ??
-    item.propertyName ??
-    item.property ??
-    item.Category ??
-    item.category ??
-    ''
+    item.PropertyName ?? item.propertyName ??
+    item.property ?? item.Category ?? item.category ?? ''
   ).trim() || 'Unknown';
 
-// API enquiry array se dynamic property-wise breakdown banao
+const getPropertyIcon = (name = '') => {
+  const n = name.toLowerCase();
+  if (n.includes('grey'))     return require('../../Assets/icons/Greystone.png');
+  if (n.includes('sky'))      return require('../../Assets/icons/stonestays1.png');
+  if (n.includes('topaz'))    return require('../../Assets/icons/stonestays1.png');
+  if (n.includes('ruby'))     return require('../../Assets/icons/stonestays1.png');
+  if (n.includes('sapphire')) return require('../../Assets/icons/stonestays1.png');
+  return require('../../Assets/icons/Greystone.png');
+};
+
 const buildBreakdown = (enquiries) => {
   const map = {};
-
   enquiries.forEach((item) => {
     const propName = getPropName(item);
     const status   = getStatus(item);
-
-    if (!map[propName]) {
-      map[propName] = { count: 0, pending: 0, resolved: 0, new: 0 };
-    }
-
+    if (!map[propName]) map[propName] = { count: 0, pending: 0, converted: 0, new: 0 };
     map[propName].count++;
-
-    if (status === 'pending')                        map[propName].pending++;
-    else if (status === 'converted' || status === 'resolved') map[propName].resolved++;
-    else if (status === 'new')                       map[propName].new++;
+    if (status === 'pending')                              map[propName].pending++;
+    else if (status === 'converted' || status === 'resolved') map[propName].converted++;
+    else if (status === 'new')                             map[propName].new++;
   });
 
-  return Object.entries(map)
-    .filter(([, vals]) => vals.count > 0)
-    .map(([name, vals]) => ({
-      key:      name.toLowerCase().replace(/\s+/g, '_'),
-      label:    name,
-      count:    vals.count,
-      pending:  vals.pending,
-      resolved: vals.resolved,
-      new:      vals.new,
-      progress: vals.count > 0 ? vals.resolved / vals.count : 0,
-      icon:     getPropertyIcon(name),
-      iconBg:   Colors.primary_light,
-    }));
-};
+  const entries = Object.entries(map).filter(([, v]) => v.count > 0);
+  const maxCount = Math.max(...entries.map(([, v]) => v.count), 1);
 
-// Monthly chart ke liye group karo
-const buildMonthlyChart = (enquiries) => {
-  const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const counts = Array(12).fill(0);
-
-  enquiries.forEach((item) => {
-    const dateStr = item.EnquiryDate ?? item.enquiryDate ?? item.CreatedDate ?? item.date ?? '';
-    if (!dateStr) return;
-
-    let monthIndex = -1;
-    if (dateStr.includes('/')) {
-      const parts = dateStr.split('/');
-      monthIndex = parseInt(parts[1], 10) - 1; // DD/MM/YYYY
-    } else if (dateStr.includes('-')) {
-      const parts = dateStr.split('-');
-      monthIndex = parseInt(parts[1], 10) - 1; // YYYY-MM-DD
-    }
-
-    if (monthIndex >= 0 && monthIndex < 12) {
-      counts[monthIndex]++;
-    }
-  });
-
-  const result = MONTH_NAMES
-    .map((month, i) => ({ month, count: counts[i] }))
-    .filter(d => d.count > 0);
-
-  return result.length > 0 ? result : [{ month: 'N/A', count: enquiries.length }];
+  return entries.map(([name, vals]) => ({
+    key:       name.toLowerCase().replace(/\s+/g, '_'),
+    label:     name,
+    count:     vals.count,
+    pending:   vals.pending,
+    converted: vals.converted,
+    new:       vals.new,
+    progress:  parseFloat((vals.count / maxCount).toFixed(2)),
+    icon:      getPropertyIcon(name),
+  }));
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 4. PERIOD DROPDOWN
+// 4. PERIOD DROPDOWN — same as Revenue/Expenses screen
 // ─────────────────────────────────────────────────────────────────────────────
 
 const PeriodDropdown = ({ selected, onSelect }) => {
   const [open, setOpen] = useState(false);
   const selectedLabel = PERIOD_OPTIONS.find(o => o.key === selected)?.label ?? 'Monthly';
 
+  const shortLabel = (lbl) => {
+    if (lbl === 'Today')     return 'Today';
+    if (lbl === 'Yesterday') return 'Yest.';
+    if (lbl === 'Monthly')   return 'Month';
+    if (lbl === 'Yearly')    return 'Year';
+    return lbl;
+  };
+
   return (
     <>
       <TouchableOpacity style={styles.periodChip} onPress={() => setOpen(true)} activeOpacity={0.8}>
-        <Text style={styles.chipIcon}>📅</Text>
-        <Text style={styles.chipLabel}>{selectedLabel}</Text>
+        <View style={styles.chipCalIcon}>
+          <View style={styles.chipCalBar} />
+          <View style={styles.chipCalDots}>
+            {[0,1,2,3,4,5].map(i => <View key={i} style={styles.chipCalDot} />)}
+          </View>
+        </View>
+        <Text style={styles.chipLabel} numberOfLines={1}>{shortLabel(selectedLabel)}</Text>
         <Text style={styles.chipArrow}>▾</Text>
       </TouchableOpacity>
 
@@ -220,73 +188,53 @@ const PeriodDropdown = ({ selected, onSelect }) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 5. MINI BAR CHART
-// ─────────────────────────────────────────────────────────────────────────────
-
-const MiniBarChart = ({ data }) => {
-  const max = Math.max(...data.map(d => d.count), 1);
-  return (
-    <View style={chartStyles.wrap}>
-      {data.map((item, i) => {
-        const heightPct = item.count / max;
-        return (
-          <View key={`${item.month}-${i}`} style={chartStyles.col}>
-            <Text style={chartStyles.val}>{item.count}</Text>
-            <View style={chartStyles.barTrack}>
-              <View style={[chartStyles.barFill, { height: `${Math.round(heightPct * 100)}%` }]} />
-            </View>
-            <Text style={chartStyles.lbl}>{item.month}</Text>
-          </View>
-        );
-      })}
-    </View>
-  );
-};
-
-const chartStyles = StyleSheet.create({
-  wrap: {
-    flexDirection: 'row',
-    alignItems:    'flex-end',
-    gap:           6,
-    height:        90,
-    paddingTop:    18,
-  },
-  col: {
-    flex:       1,
-    alignItems: 'center',
-    gap:        3,
-  },
-  val: {
-    fontSize:   F.f10,
-    color:      Colors.primary_mid,
-    fontWeight: '600',
-  },
-  barTrack: {
-    flex:            1,
-    width:           '80%',
-    backgroundColor: Colors.border_light,
-    borderRadius:    4,
-    justifyContent:  'flex-end',
-    overflow:        'hidden',
-  },
-  barFill: {
-    width:           '100%',
-    backgroundColor: Colors.primary,
-    borderRadius:    4,
-  },
-  lbl: {
-    fontSize: F.f10,
-    color:    Colors.text_label,
-  },
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 6. PROGRESS BAR
+// 5. PROGRESS BAR
 // ─────────────────────────────────────────────────────────────────────────────
 
 const ProgressBar = ({ progress }) => (
   <View style={styles.progTrack}>
-    <View style={[styles.progFill, { width: `${Math.round(progress * 100)}%` }]} />
+    <View style={[styles.progFill, { width: `${Math.round((progress || 0) * 100)}%` }]} />
+  </View>
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 6. SKELETON
+// ─────────────────────────────────────────────────────────────────────────────
+
+const SkeletonBox = ({ w, h, radius = 6 }) => (
+  <View style={{ width: w, height: h, borderRadius: radius, backgroundColor: '#E2E8F0' }} />
+);
+
+const LoadingSkeleton = () => (
+  <View style={{ gap: 12 }}>
+    <View style={{ flexDirection: 'row', gap: 8 }}>
+      {[0,1,2].map(i => (
+        <View key={i} style={[styles.statCard, { flex: 1, padding: 14, gap: 6 }]}>
+          <SkeletonBox w={32} h={32} radius={8} />
+          <SkeletonBox w={40} h={18} />
+          <SkeletonBox w={60} h={10} />
+        </View>
+      ))}
+    </View>
+    {[0,1].map(i => (
+      <View key={i} style={[styles.enqCard, { padding: 14, gap: 10 }]}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <SkeletonBox w={36} h={36} radius={10} />
+          <View style={{ gap: 6 }}>
+            <SkeletonBox w={120} h={14} />
+            <SkeletonBox w={80}  h={11} />
+          </View>
+          <View style={{ flex: 1 }} />
+          <SkeletonBox w={60} h={26} radius={8} />
+        </View>
+        <SkeletonBox w={'100%'} h={4} radius={4} />
+        <View style={{ flexDirection: 'row', gap: 6 }}>
+          <SkeletonBox w={70} h={22} radius={5} />
+          <SkeletonBox w={80} h={22} radius={5} />
+          <SkeletonBox w={65} h={22} radius={5} />
+        </View>
+      </View>
+    ))}
   </View>
 );
 
@@ -301,264 +249,326 @@ const StatusBadge = ({ label, bg, border, color }) => (
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 8. PROPERTY INQUIRY ROW
+// 8. PROPERTY ENQUIRY ROW — same structure as Revenue PropertyRow
 // ─────────────────────────────────────────────────────────────────────────────
 
-const PropertyInquiryRow = ({ prop }) => (
+const PropertyEnquiryRow = ({ prop }) => (
   <View style={styles.propRow}>
-    <View style={[styles.propRowIcon, { backgroundColor: prop.iconBg }]}>
+    <View style={styles.propRowIcon}>
       <Image source={prop.icon} style={styles.propRowIconImg} resizeMode="contain" />
     </View>
-
     <View style={styles.propRowMid}>
       <View style={styles.propRowTopLine}>
         <Text style={styles.propRowName}>{prop.label}</Text>
-        <Text style={styles.propRowCount}>{prop.count} inquiries</Text>
+        <View style={styles.totalBadge}>
+          <Text style={styles.totalBadgeText}>{prop.count} enquiries</Text>
+        </View>
       </View>
-
-      <View style={styles.propStatusRow}>
-        <StatusBadge label={`🆕 ${prop.new} New`}        bg={Colors.warn_bg}    border={Colors.warn_border}    color={Colors.warn_text}    />
-        <StatusBadge label={`⏳ ${prop.pending} Pending`} bg={Colors.danger_bg}  border={Colors.danger_border}  color={Colors.danger_text}  />
-        <StatusBadge label={`✅ ${prop.resolved} Done`}   bg={Colors.success_bg} border={Colors.success_border} color={Colors.success_text} />
-      </View>
-
       <ProgressBar progress={prop.progress} />
+      <View style={styles.propStatusRow}>
+        <StatusBadge label={`🆕 ${prop.new} New`}           bg={Colors.warn_bg}    border={Colors.warn_border}    color={Colors.warn_text}    />
+        <StatusBadge label={`⏳ ${prop.pending} Pending`}    bg={Colors.danger_bg}  border={Colors.danger_border}  color={Colors.danger_text}  />
+        <StatusBadge label={`✅ ${prop.converted} Converted`} bg={Colors.success_bg} border={Colors.success_border} color={Colors.success_text} />
+      </View>
     </View>
   </View>
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 9. MAIN SCREEN
+// 9. ENQUIRY SECTION CARD — same as Revenue/Expenses ExpenseSectionCard
+// ─────────────────────────────────────────────────────────────────────────────
+
+const EnquirySectionCard = ({ title, categoryIcon, categoryIconBg, categoryIconTint, properties, totalCount }) => (
+  <View style={styles.enqCard}>
+    <View style={styles.enqCardHdr}>
+      <View style={[styles.enqCardIconBox, { backgroundColor: categoryIconBg }]}>
+        <Image source={categoryIcon} style={[styles.enqCardIcon, { tintColor: categoryIconTint }]} resizeMode="contain" />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.enqCardTitle}>{title}</Text>
+        <Text style={styles.enqCardSub}>{properties.length} properties · {totalCount} enquiries</Text>
+      </View>
+      <View style={styles.totalBadge}>
+        <Text style={styles.totalBadgeText}>{totalCount}</Text>
+      </View>
+    </View>
+    <View style={styles.cardDivider} />
+    <View style={styles.enqCardBody}>
+      {properties.map(prop => (
+        <PropertyEnquiryRow key={prop.key} prop={prop} />
+      ))}
+    </View>
+  </View>
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 10. MAIN SCREEN
 // ─────────────────────────────────────────────────────────────────────────────
 
 const TotalEnquiryScreen = ({ navigation }) => {
-
   const [period,    setPeriod]    = useState('monthly');
+  const [search,    setSearch]    = useState('');
   const [enquiries, setEnquiries] = useState([]);
   const [loading,   setLoading]   = useState(false);
+  const [error,     setError]     = useState(null);
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
-  const fetchTotalEnquiries = async () => {
+
+  const fetchEnquiries = useCallback(async () => {
     try {
       setLoading(true);
+      setError(null);
       const result = await getEnquiries();
-
       if (result.success) {
-        console.log('✅ TOTAL ENQUIRIES =>', JSON.stringify(result.data, null, 2));
-
-        let rawData = result?.data?.data ?? result?.data ?? [];
-        let parsed  = [];
-
-        if (typeof rawData === 'string') {
-          try { parsed = JSON.parse(rawData); } catch { parsed = []; }
-        } else if (Array.isArray(rawData)) {
-          parsed = rawData;
-        } else if (rawData && typeof rawData === 'object') {
-          parsed = [rawData];
-        }
-
-        console.log('🔑 ENQUIRY KEYS =>', Object.keys(parsed[0] ?? {}));
-        setEnquiries(parsed);
+        let raw = result?.data?.data ?? result?.data ?? [];
+        if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch { raw = []; } }
+        if (!Array.isArray(raw)) raw = raw ? [raw] : [];
+        setEnquiries(raw);
       } else {
-        console.warn('⚠️ getEnquiries failed:', result.message);
+        setError(result.message ||'Failed to load data. Please try again.');
       }
-    } catch (error) {
-      console.log('❌ TOTAL ENQUIRIES ERROR =>', error);
+    } catch (err) {
+      setError('Something went wrong.');
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchTotalEnquiries();
   }, []);
 
-  // ── Computed values ────────────────────────────────────────────────────────
-  const totalEnquiries     = enquiries.length;
-  const pendingEnquiries   = enquiries.filter(i => getStatus(i) === 'pending').length;
-  const convertedEnquiries = enquiries.filter(i => getStatus(i) === 'converted').length;
-  const newEnquiries       = enquiries.filter(i => getStatus(i) === 'new').length;
-  const conversionRate     = totalEnquiries > 0
-    ? `${Math.round((convertedEnquiries / totalEnquiries) * 100)}%`
-    : '0%';
+  useEffect(() => { fetchEnquiries(); }, [fetchEnquiries]);
 
-  // Monthly vs Yearly filter
-  const now          = new Date();
-  const currentYear  = now.getFullYear();
-  const currentMonth = now.getMonth();
+  useEffect(() => {
+    const unsub = navigation.addListener('focus', fetchEnquiries);
+    return unsub;
+  }, [navigation, fetchEnquiries]);
+
+  // ── Filter by period ───────────────────────────────────────────────────────
 
   const filteredEnquiries = enquiries.filter((item) => {
     const dateStr = item.EnquiryDate ?? item.enquiryDate ?? item.CreatedDate ?? item.date ?? '';
-    if (!dateStr) return true;
-
-    let date = null;
-    if (dateStr.includes('/')) {
-      const [dd, mm, yyyy] = dateStr.split('/');
-      date = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
-    } else if (dateStr.includes('-')) {
-      date = new Date(dateStr);
+    if (!dateStr || period === 'monthly' || period === 'yearly') {
+      if (period === 'monthly' || period === 'yearly') {
+        if (!dateStr) return true;
+        let date = null;
+        if (dateStr.includes('/')) {
+          const [dd, mm, yyyy] = dateStr.split('/');
+          date = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
+        } else if (dateStr.includes('-')) {
+          date = new Date(dateStr);
+        }
+        if (!date || isNaN(date)) return true;
+        const now = new Date();
+        if (period === 'monthly') return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
+        return date.getFullYear() === now.getFullYear();
+      }
     }
-
-    if (!date || isNaN(date)) return true;
-
-    if (period === 'monthly') {
-      return date.getFullYear() === currentYear && date.getMonth() === currentMonth;
-    } else {
-      return date.getFullYear() === currentYear;
-    }
+    return true;
   });
 
-  // ✅ FIX 1: Dynamic breakdown from filtered enquiries using API's actual PropertyName
-  const breakdownData = buildBreakdown(filteredEnquiries);
+  // ── Search filter ──────────────────────────────────────────────────────────
 
-  // Chart from full data
-  const monthlyChart = buildMonthlyChart(enquiries);
+  const searchedEnquiries = !search.trim()
+    ? filteredEnquiries
+    : filteredEnquiries.filter(i =>
+        getPropName(i).toLowerCase().includes(search.toLowerCase()) ||
+        safeStr(i.FullName ?? i.fullName ?? i.name ?? '').toLowerCase().includes(search.toLowerCase())
+      );
+
+  // ── Stats ──────────────────────────────────────────────────────────────────
+
+  const total     = enquiries.length;
+  const pending   = enquiries.filter(i => getStatus(i) === 'pending').length;
+  const converted = enquiries.filter(i => getStatus(i) === 'converted').length;
+  const convRate  = total > 0 ? `${Math.round((converted / total) * 100)}%` : '0%';
+
+  // ── Build category breakdowns ──────────────────────────────────────────────
+
+  const buildCategory = (categoryName) => {
+    const filtered = searchedEnquiries.filter(
+      i => (i.Category ?? i.category ?? '').toLowerCase() === categoryName.toLowerCase()
+    );
+    return buildBreakdown(filtered);
+  };
+
+  // Also build from PropertyName for those without Category
+  const farmProps   = buildCategory('farmhouse');
+  const airbnbProps = buildCategory('airbnb');
+
+  // Fallback: if no category, group all by property
+  const allProps = buildBreakdown(searchedEnquiries);
+
+  const showFarm   = farmProps.length   > 0;
+  const showAirbnb = airbnbProps.length > 0;
+  const showAll    = !showFarm && !showAirbnb && allProps.length > 0;
+
+  const farmCount   = searchedEnquiries.filter(i => (i.Category ?? i.category ?? '').toLowerCase() === 'farmhouse').length;
+  const airbnbCount = searchedEnquiries.filter(i => (i.Category ?? i.category ?? '').toLowerCase() === 'airbnb').length;
 
   // ── Render ────────────────────────────────────────────────────────────────
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar backgroundColor={Colors.header_dark} barStyle="light-content" />
 
-      {/* ── HEADER ── */}
+      {/* ── HEADER ─────────────────────────────────────────────────────────── */}
       <View style={styles.header}>
         <View style={styles.circle1} />
         <View style={styles.circle2} />
 
         <View style={styles.headerTop}>
-          <TouchableOpacity
-            style={styles.backBtn}
-            onPress={() => navigation.goBack()}
-            activeOpacity={0.8}
-          >
-            <Image
-              source={require('../../Assets/icons/ak.png')}
-              style={styles.backIcon}
-              resizeMode="contain"
-            />
+          <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.8}>
+            <Image source={require('../../Assets/icons/ak.png')} style={styles.backIcon} resizeMode="contain" />
           </TouchableOpacity>
-
           <View style={styles.headerTitleBlock}>
-            <Text style={styles.headerTitle}>Total Inquiries</Text>
+            <Text style={styles.headerTitle}>Total Enquiries</Text>
             <Text style={styles.headerSubtitle}>All properties overview</Text>
           </View>
-
-          <PeriodDropdown selected={period} onSelect={setPeriod} />
+          <TouchableOpacity style={styles.refreshBtn} onPress={fetchEnquiries} activeOpacity={0.8} disabled={loading}>
+            {loading
+              ? <ActivityIndicator size="small" color={Colors.text_white} />
+              : <Text style={styles.refreshIcon}>↻</Text>
+            }
+          </TouchableOpacity>
         </View>
 
         {/* Summary strip */}
         <View style={styles.summaryStrip}>
           <View style={[styles.stripItem, styles.stripItemBorder]}>
             <Text style={styles.stripLabel}>TOTAL</Text>
-            {loading
-              ? <ActivityIndicator size="small" color={Colors.text_white} style={{ marginVertical: 4 }} />
-              : <Text style={styles.stripVal}>{totalEnquiries}</Text>
-            }
-            <Text style={[styles.stripTrend, styles.stripTrendUp]}>
-              {convertedEnquiries > 0 ? `${conversionRate} converted` : '—'}
-            </Text>
+            <Text style={styles.stripVal}>{loading ? '...' : total}</Text>
+            <Text style={styles.stripSub}>{convRate} converted</Text>
           </View>
           <View style={[styles.stripItem, styles.stripItemBorder]}>
             <Text style={styles.stripLabel}>PENDING</Text>
-            {loading
-              ? <ActivityIndicator size="small" color={Colors.text_white} style={{ marginVertical: 4 }} />
-              : <Text style={styles.stripVal}>{pendingEnquiries}</Text>
-            }
+            <Text style={styles.stripVal}>{loading ? '...' : pending}</Text>
             <Text style={styles.stripSub}>awaiting reply</Text>
           </View>
           <View style={styles.stripItem}>
             <Text style={styles.stripLabel}>CONVERTED</Text>
-            {loading
-              ? <ActivityIndicator size="small" color={Colors.text_white} style={{ marginVertical: 4 }} />
-              : <Text style={styles.stripVal}>{convertedEnquiries}</Text>
-            }
+            <Text style={styles.stripVal}>{loading ? '...' : converted}</Text>
             <Text style={styles.stripSub}>completed</Text>
           </View>
         </View>
       </View>
 
-      {/* ── BODY ── */}
+      {/* ── BODY ───────────────────────────────────────────────────────────── */}
       <ScrollView
         style={styles.body}
         contentContainerStyle={[styles.bodyContent, { paddingBottom: 70 }]}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
-
-        {loading ? (
-          <View style={styles.loadingBox}>
-            <ActivityIndicator size="large" color={Colors.primary} />
-            <Text style={styles.loadingText}>Loading enquiries...</Text>
+        {/* Search + Period row */}
+        <View style={styles.filterRow}>
+          <View style={styles.searchWrap}>
+            <Text style={styles.searchIconTxt}>🔍</Text>
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search properties or names..."
+              placeholderTextColor={Colors.text_label}
+              value={search}
+              onChangeText={setSearch}
+              autoCorrect={false}
+              returnKeyType="search"
+            />
+            {search.length > 0 && (
+              <TouchableOpacity onPress={() => setSearch('')} style={styles.searchClear}>
+                <Text style={styles.searchClearTxt}>✕</Text>
+              </TouchableOpacity>
+            )}
           </View>
-        ) : (
-          <>
-            {/* ── Quick stats row ── */}
-            <View style={styles.quickStatsRow}>
-              <View style={styles.quickStatBox}>
-                <Text style={styles.quickStatEmoji}>🆕</Text>
-                <Text style={styles.quickStatVal}>{newEnquiries || totalEnquiries}</Text>
-                <Text style={styles.quickStatLbl}>New</Text>
-              </View>
-              <View style={styles.quickStatBox}>
-                <Text style={styles.quickStatEmoji}>🔄</Text>
-                <Text style={styles.quickStatVal}>{conversionRate}</Text>
-                <Text style={styles.quickStatLbl}>Conversion</Text>
-              </View>
-              <View style={styles.quickStatBox}>
-                <Text style={styles.quickStatEmoji}>✅</Text>
-                <Text style={styles.quickStatVal}>{convertedEnquiries}</Text>
-                <Text style={styles.quickStatLbl}>Converted</Text>
-              </View>
-            </View>
+          <PeriodDropdown selected={period} onSelect={setPeriod} />
+        </View>
 
-            {/* ── Bar chart card ── */}
-            <View style={styles.card}>
-              {/* ✅ FIX 2: Green badge hataya, clean header text diya */}
-              <View style={styles.cardHdrRow}>
-                <View>
-                  <Text style={styles.cardTitle}>
-                    {period === 'monthly' ? 'Monthly Trend' : 'Yearly Trend'}
-                  </Text>
-                  <Text style={styles.cardSubtitle}>{totalEnquiries} total inquiries</Text>
-                </View>
-              </View>
-              <View style={styles.cardDivider} />
-              <View style={styles.cardBody}>
-                {monthlyChart.length > 0
-                  ? <MiniBarChart data={monthlyChart} />
-                  : <Text style={styles.emptyText}>No data available</Text>
-                }
-              </View>
-            </View>
+        {/* Loading */}
+        {loading && <LoadingSkeleton />}
 
-            {/* ── Property breakdown card ── */}
-            <View style={styles.card}>
-              <View style={styles.cardHdrRow}>
-                <View>
-                  <Text style={styles.cardTitle}>Property Breakdown</Text>
-                  <Text style={styles.cardSubtitle}>{breakdownData.length} properties found</Text>
-                </View>
-              </View>
-              <View style={styles.cardDivider} />
-              <View style={[styles.cardBody, { gap: 10 }]}>
-                {breakdownData.length > 0 ? (
-                  breakdownData.map((prop) => (
-                    <PropertyInquiryRow key={prop.key} prop={prop} />
-                  ))
-                ) : (
-                  <Text style={styles.emptyText}>No property data found</Text>
-                )}
-              </View>
-            </View>
-
-            {/* ── View All button ── */}
-            <TouchableOpacity
-              style={styles.viewBtn}
-              activeOpacity={0.85}
-              onPress={() => navigation.navigate('ReportsScreen', { activeTab: 'Enquiry' })}
-            >
-              <Text style={styles.viewBtnText}>View All Inquiries</Text>
+        {/* Error */}
+        {!loading && error && (
+          <View style={styles.errorState}>
+            <Text style={styles.errorEmoji}>⚠️</Text>
+            <Text style={styles.errorTxt}>{error}</Text>
+            <TouchableOpacity style={styles.retryBtn} onPress={fetchEnquiries} activeOpacity={0.8}>
+              <Text style={styles.retryTxt}>Retry</Text>
             </TouchableOpacity>
-          </>
+          </View>
         )}
+
+        {/* Empty */}
+        {!loading && !error && searchedEnquiries.length === 0 && (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyEmoji}>🔍</Text>
+            <Text style={styles.emptyTxt}>
+              {search  ? `No results found for "${search}".`
+  : 'No enquiry data available.'}
+            </Text>
+          </View>
+        )}
+
+        {/* Stats row */}
+        {!loading && !error && searchedEnquiries.length > 0 && (
+          <View style={styles.statsRow}>
+            <View style={styles.statCard}>
+              <Text style={styles.statEmoji}>🆕</Text>
+              <Text style={styles.statVal}>{enquiries.filter(i => getStatus(i) === 'new').length || total}</Text>
+              <Text style={styles.statLbl}>New</Text>
+            </View>
+            <View style={styles.statCard}>
+              <Text style={styles.statEmoji}>🔄</Text>
+              <Text style={styles.statVal}>{convRate}</Text>
+              <Text style={styles.statLbl}>Conversion</Text>
+            </View>
+            <View style={styles.statCard}>
+              <Text style={styles.statEmoji}>✅</Text>
+              <Text style={styles.statVal}>{converted}</Text>
+              <Text style={styles.statLbl}>Converted</Text>
+            </View>
+          </View>
+        )}
+
+        {/* Farmhouse card */}
+        {!loading && !error && showFarm && (
+          <EnquirySectionCard
+            title="Farmhouse"
+            categoryIcon={require('../../Assets/icons/Greystone.png')}
+            categoryIconBg="#CCFBF1"
+            categoryIconTint={Colors.primary_text}
+            properties={farmProps}
+            totalCount={farmCount}
+          />
+        )}
+
+        {/* Airbnb card */}
+        {!loading && !error && showAirbnb && (
+          <EnquirySectionCard
+            title="Airbnb"
+            categoryIcon={require('../../Assets/icons/stonestays1.png')}
+            categoryIconBg="#CFFAFE"
+            categoryIconTint={Colors.primary}
+            properties={airbnbProps}
+            totalCount={airbnbCount}
+          />
+        )}
+
+        {/* Fallback — all properties if no category */}
+        {!loading && !error && showAll && (
+          <EnquirySectionCard
+            title="All Properties"
+            categoryIcon={require('../../Assets/icons/Greystone.png')}
+            categoryIconBg="#CCFBF1"
+            categoryIconTint={Colors.primary_text}
+            properties={allProps}
+            totalCount={searchedEnquiries.length}
+          />
+        )}
+
+        {/* View All Button */}
+        <TouchableOpacity
+          style={styles.viewBtn}
+          activeOpacity={0.85}
+          onPress={() => navigation.navigate('ReportsScreen', { activeTab: 'Enquiry' })}
+        >
+          <Text style={styles.viewBtnText}>View All Enquiries</Text>
+        </TouchableOpacity>
 
       </ScrollView>
     </SafeAreaView>
@@ -568,14 +578,14 @@ const TotalEnquiryScreen = ({ navigation }) => {
 export default TotalEnquiryScreen;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 10. STYLES
+// 11. STYLES
 // ─────────────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
 
-  safeArea: { flex: 1, backgroundColor: '#0F172A' },
+  safeArea: { flex: 1, backgroundColor: Colors.header_dark },
 
-  // Header
+  // ── Header ────────────────────────────────────────────────────────────────
   header: {
     backgroundColor: Colors.header_dark,
     paddingTop:      8,
@@ -585,98 +595,84 @@ const styles = StyleSheet.create({
   headerTop: {
     flexDirection:     'row',
     alignItems:        'center',
-    paddingHorizontal: 16,
-    paddingBottom:     16,
+    paddingHorizontal: 20,
+    paddingBottom:     18,
     zIndex:            2,
-    gap:               10,
   },
   backBtn: {
-    width:           36,
-    height:          36,
-    borderRadius:    10,
+    width:           36, height: 36, borderRadius: 10,
     backgroundColor: 'rgba(255,255,255,0.12)',
-    alignItems:      'center',
-    justifyContent:  'center',
+    alignItems: 'center', justifyContent: 'center', marginRight: 14,
   },
   backIcon:         { width: 18, height: 18, tintColor: Colors.text_white },
   headerTitleBlock: { flex: 1 },
-  headerTitle: {
-    color:        Colors.text_white,
-    fontSize:     F.f17,
-    fontWeight:   '600',
-    marginBottom: 2,
-  },
-  headerSubtitle: { color: Colors.text_muted, fontSize: F.f12 },
-
-  circle1: {
-    position: 'absolute', width: 130, height: 130, borderRadius: 65,
-    borderWidth: 22, borderColor: 'rgba(255,255,255,0.07)',
-    top: -35, right: -30, zIndex: 1,
-  },
-  circle2: {
-    position: 'absolute', width: 70, height: 70, borderRadius: 35,
-    borderWidth: 14, borderColor: 'rgba(255,255,255,0.05)',
-    bottom: 30, right: 60, zIndex: 1,
-  },
-
-  // Period chip
-  periodChip: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    backgroundColor:   'rgba(255,255,255,0.13)',
-    borderRadius:      10,
-    paddingHorizontal: 10,
-    paddingVertical:   7,
-    gap:               5,
-    borderWidth:       0.5,
-    borderColor:       'rgba(255,255,255,0.20)',
-  },
-  chipIcon:  { fontSize: 13 },
-  chipLabel: { fontSize: F.f12, fontWeight: '600', color: Colors.text_white },
-  chipArrow: { fontSize: F.f10, color: 'rgba(255,255,255,0.7)' },
-
-  // Dropdown
-  ddOverlay: {
-    flex:            1,
-    backgroundColor: 'rgba(15,23,42,0.45)',
-    justifyContent:  'flex-end',
-  },
-  ddSheet: {
-    backgroundColor:      Colors.card_bg,
-    borderTopLeftRadius:  24,
-    borderTopRightRadius: 24,
-    paddingBottom:        44,
-  },
-  ddHandle: {
-    alignSelf:       'center',
-    width:           40,
-    height:          4,
-    borderRadius:    2,
-    backgroundColor: Colors.border,
-    marginTop:       12,
-    marginBottom:    4,
-  },
-  ddSheetHdr: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    justifyContent:    'space-between',
-    paddingHorizontal: 20,
-    paddingVertical:   14,
-    borderBottomWidth: 0.5,
-    borderBottomColor: Colors.border,
-  },
-  ddSheetTitle:      { fontSize: F.f16, fontWeight: '700', color: Colors.text_dark },
-  ddCloseBtn: {
-    width: 32, height: 32, borderRadius: 16,
-    backgroundColor: Colors.input_bg,
+  headerTitle:      { color: Colors.text_white, fontSize: F.f17, fontWeight: '600', marginBottom: 3 },
+  headerSubtitle:   { color: Colors.text_muted, fontSize: F.f12 },
+  refreshBtn: {
+    width: 36, height: 36, borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.12)',
     alignItems: 'center', justifyContent: 'center',
   },
+  refreshIcon: { fontSize: 20, color: Colors.text_white, fontWeight: '700' },
+  circle1: { position: 'absolute', width: 130, height: 130, borderRadius: 65, borderWidth: 22, borderColor: 'rgba(255,255,255,0.07)', top: -35, right: -30, zIndex: 1 },
+  circle2: { position: 'absolute', width: 70,  height: 70,  borderRadius: 35, borderWidth: 14, borderColor: 'rgba(255,255,255,0.05)', bottom: 30, right: 60, zIndex: 1 },
+
+  // ── Summary Strip ─────────────────────────────────────────────────────────
+  summaryStrip:    { flexDirection: 'row', backgroundColor: Colors.strip_bg, borderTopWidth: 0.5, borderTopColor: Colors.border_white },
+  stripItem:       { flex: 1, padding: 11 },
+  stripItemBorder: { borderRightWidth: 0.5, borderRightColor: Colors.border_white },
+  stripLabel:      { fontSize: F.f10, color: 'rgba(255,255,255,0.50)', letterSpacing: 0.4, marginBottom: 3, marginLeft: 10 },
+  stripVal:        { fontSize: F.f15, fontWeight: '600', color: Colors.text_white, marginLeft: 10 },
+  stripSub:        { fontSize: F.f10, color: 'rgba(255,255,255,0.40)', marginTop: 1, marginLeft: 10 },
+
+  // ── Body ──────────────────────────────────────────────────────────────────
+  body:        { flex: 1, backgroundColor: Colors.page_bg },
+  bodyContent: { paddingHorizontal: 14, paddingTop: 14, paddingBottom: 34, gap: 12 },
+
+  // ── Filter Row ────────────────────────────────────────────────────────────
+  filterRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  searchWrap: {
+    flex: 1, flexDirection: 'row', alignItems: 'center',
+    backgroundColor: Colors.card_bg, borderRadius: 12,
+    borderWidth: 1, borderColor: Colors.border,
+    paddingHorizontal: 12, height: 46, gap: 8,
+    ...Platform.select({
+      ios:     { shadowColor: '#0F766E', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.07, shadowRadius: 4 },
+      android: { elevation: 1 },
+    }),
+  },
+  searchIconTxt:  { fontSize: 14 },
+  searchInput:    { flex: 1, fontSize: F.f13, color: Colors.text_dark, padding: 0 },
+  searchClear:    { width: 24, height: 24, borderRadius: 12, backgroundColor: Colors.input_bg, alignItems: 'center', justifyContent: 'center' },
+  searchClearTxt: { fontSize: F.f10, color: Colors.text_label },
+
+  // ── Period Chip ───────────────────────────────────────────────────────────
+  periodChip: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: Colors.header_dark, borderRadius: 12,
+    paddingHorizontal: 10, height: 46, gap: 5, minWidth: 80, justifyContent: 'center',
+    ...Platform.select({
+      ios:     { shadowColor: '#0F766E', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.20, shadowRadius: 4 },
+      android: { elevation: 3 },
+    }),
+  },
+  chipCalIcon: { width: 14, height: 14, borderWidth: 1.2, borderColor: 'rgba(255,255,255,0.6)', borderRadius: 2, overflow: 'hidden' },
+  chipCalBar:  { width: '100%', height: 4, backgroundColor: 'rgba(255,255,255,0.6)' },
+  chipCalDots: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', padding: 1, gap: 1, justifyContent: 'center', alignContent: 'center' },
+  chipCalDot:  { width: 2, height: 2, borderRadius: 1, backgroundColor: 'rgba(255,255,255,0.7)' },
+  chipLabel:   { fontSize: F.f12, fontWeight: '600', color: Colors.text_white, flexShrink: 1 },
+  chipArrow:   { fontSize: F.f10, color: 'rgba(255,255,255,0.8)' },
+
+  // ── Dropdown ──────────────────────────────────────────────────────────────
+  ddOverlay:         { flex: 1, backgroundColor: 'rgba(15,23,42,0.45)', justifyContent: 'flex-end' },
+  ddSheet:           { backgroundColor: Colors.card_bg, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingBottom: 40 },
+  ddHandle:          { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: Colors.border, marginTop: 12, marginBottom: 4 },
+  ddSheetHdr:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 0.5, borderBottomColor: Colors.border },
+  ddSheetTitle:      { fontSize: F.f16, fontWeight: '700', color: Colors.text_dark },
+  ddCloseBtn:        { width: 32, height: 32, borderRadius: 16, backgroundColor: Colors.input_bg, alignItems: 'center', justifyContent: 'center' },
   ddCloseTxt:        { fontSize: F.f12, color: Colors.text_grey },
   ddSep:             { height: 0.5, backgroundColor: Colors.border_light, marginHorizontal: 20 },
-  ddOptRow: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 20, paddingVertical: 18, gap: 14,
-  },
+  ddOptRow:          { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 18, gap: 14 },
   ddOptRowActive:    { backgroundColor: Colors.primary_light },
   ddOptAccent:       { width: 4, height: 20, borderRadius: 2, backgroundColor: Colors.border },
   ddOptAccentActive: { backgroundColor: Colors.primary },
@@ -684,141 +680,71 @@ const styles = StyleSheet.create({
   ddOptTxtActive:    { fontWeight: '700', color: Colors.primary },
   ddCheck:           { fontSize: F.f16, color: Colors.primary, fontWeight: '700' },
 
-  // Summary strip
-  summaryStrip: {
-    flexDirection:  'row',
-    backgroundColor: Colors.strip_bg,
-    borderTopWidth:  0.5,
-    borderTopColor:  Colors.border_white,
-  },
-  stripItem:       { flex: 1, padding: 12 },
-  stripItemBorder: { borderRightWidth: 0.5, borderRightColor: Colors.border_white },
-  stripLabel: {
-    fontSize: F.f10, color: 'rgba(255,255,255,0.50)',
-    letterSpacing: 0.5, marginBottom: 3, marginLeft: 8,
-  },
-  stripVal:     { fontSize: F.f18, fontWeight: '700', color: Colors.text_white, marginLeft: 8 },
-  stripSub:     { fontSize: F.f10, color: 'rgba(255,255,255,0.40)', marginTop: 1, marginLeft: 8 },
-  stripTrend:   { fontSize: F.f11, color: 'rgba(255,255,255,0.50)', marginTop: 1, marginLeft: 8 },
-  stripTrendUp: { color: '#6EE7B7' },
-
-  // Body
-  body:        { flex: 1, backgroundColor: Colors.page_bg },
-  bodyContent: { paddingHorizontal: 14, paddingTop: 14, paddingBottom: 34, gap: 12 },
-
-  // Loading
-  loadingBox: {
-    paddingVertical: 60,
-    alignItems:      'center',
-    gap:             12,
-  },
-  loadingText: {
-    color:    Colors.text_grey,
-    fontSize: F.f14,
-  },
-
-  // Empty
-  emptyText: {
-    color:     Colors.text_label,
-    fontSize:  F.f13,
-    textAlign: 'center',
-    paddingVertical: 20,
-  },
-
-  // Quick stats
-  quickStatsRow: { flexDirection: 'row', gap: 8 },
-  quickStatBox: {
-    flex:            1,
-    backgroundColor: Colors.card_bg,
-    borderRadius:    12,
-    borderWidth:     0.5,
-    borderColor:     Colors.border,
-    alignItems:      'center',
-    paddingVertical: 14,
-    gap:             3,
+  // ── Stats Row ─────────────────────────────────────────────────────────────
+  statsRow: { flexDirection: 'row', gap: 8 },
+  statCard: {
+    flex: 1, backgroundColor: Colors.card_bg, borderRadius: 12,
+    borderWidth: 0.5, borderColor: Colors.border,
+    alignItems: 'center', paddingVertical: 14, gap: 4,
     ...Platform.select({
       ios:     { shadowColor: '#0F766E', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.07, shadowRadius: 4 },
       android: { elevation: 1 },
     }),
   },
-  quickStatEmoji: { fontSize: 20 },
-  quickStatVal:   { fontSize: F.f16, fontWeight: '700', color: Colors.text_dark },
-  quickStatLbl:   { fontSize: F.f10, color: Colors.text_label },
+  statEmoji: { fontSize: 22 },
+  statVal:   { fontSize: F.f16, fontWeight: '700', color: Colors.text_dark },
+  statLbl:   { fontSize: F.f10, color: Colors.text_label },
 
-  // Card
-  card: {
-    backgroundColor: Colors.card_bg,
-    borderRadius:    16,
-    borderWidth:     1,
-    borderColor:     '#FFF',
-    overflow:        'hidden',
+  // ── Enquiry Section Card ──────────────────────────────────────────────────
+  enqCard: {
+    backgroundColor: Colors.card_bg, borderRadius: 16,
+    borderWidth: 0.5, borderColor: Colors.border, overflow: 'hidden',
     ...Platform.select({
       ios:     { shadowColor: '#0F766E', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8 },
       android: { elevation: 2 },
     }),
   },
-  cardHdrRow: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    justifyContent:    'space-between',
-    paddingHorizontal: 14,
-    paddingVertical:   13,
-    backgroundColor:   Colors.card_header_bg,
-  },
-  cardTitle:    { fontSize: F.f14, fontWeight: '600', color: Colors.text_dark },
-  cardSubtitle: { fontSize: F.f11, color: Colors.text_label, marginTop: 2 },
-  cardDivider:  { height: 0.5, backgroundColor: Colors.border },
-  cardBody:     { padding: 14 },
+  enqCardHdr:     { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 13, backgroundColor: Colors.card_header_bg },
+  enqCardIconBox: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#b8b8b8' },
+  enqCardIcon:    { width: 30, height: 30 },
+  enqCardTitle:   { color: Colors.text_dark, fontSize: F.f14, fontWeight: '600' },
+  enqCardSub:     { color: Colors.text_grey, fontSize: F.f11, marginTop: 1 },
+  enqCardBody:    { padding: 14, gap: 10 },
+  cardDivider:    { height: 0.5, backgroundColor: Colors.border },
 
-  // Property row
+  totalBadge:     { backgroundColor: Colors.primary_light, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 0.5, borderColor: Colors.primary_border },
+  totalBadgeText: { color: Colors.primary, fontSize: F.f12, fontWeight: '600' },
+
+  // ── Property Row ──────────────────────────────────────────────────────────
   propRow: {
-    flexDirection: 'row',
-    alignItems:    'center',
-    gap:           10,
-    borderRadius:  12,
-    padding:       12,
-    borderWidth:   0.5,
-    borderColor:   Colors.border,
+    flexDirection: 'row', alignItems: 'flex-start', gap: 10,
+    backgroundColor: Colors.input_bg, borderRadius: 10,
+    padding: 12, borderWidth: 0.5, borderColor: Colors.border,
   },
-  propRowIcon: {
-    width: 38, height: 38, borderRadius: 10,
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: '#b8b8b8',
-    flexShrink: 0,
-  },
-  propRowIconImg: { width: 30, height: 30 },
-  propRowMid:     { flex: 1, gap: 5 },
-  propRowTopLine: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  propRowName:    { fontSize: F.f13, fontWeight: '600', color: Colors.text_dark },
-  propRowCount:   { fontSize: F.f12, fontWeight: '600', color: Colors.primary },
+  propRowIcon:    { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center', flexShrink: 0, borderWidth: 1, borderColor: '#b8b8b8', marginTop: 2 },
+  propRowIconImg: { width: 28, height: 28 },
+  propRowMid:     { flex: 1, gap: 6 },
+  propRowTopLine: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  propRowName:    { fontSize: F.f13, fontWeight: '600', color: Colors.text_dark, flex: 1, marginRight: 8 },
   propStatusRow:  { flexDirection: 'row', gap: 5, flexWrap: 'wrap' },
 
-  statusBadge: {
-    borderRadius:      5,
-    paddingHorizontal: 6,
-    paddingVertical:   2,
-    borderWidth:       0.5,
-  },
+  statusBadge:    { borderRadius: 5, paddingHorizontal: 7, paddingVertical: 3, borderWidth: 0.5 },
   statusBadgeTxt: { fontSize: F.f10, fontWeight: '600' },
 
-  // Progress bar
-  progTrack: {
-    height: 4, backgroundColor: Colors.border_light,
-    borderRadius: 4, overflow: 'hidden',
-  },
-  progFill: { height: 4, backgroundColor: Colors.primary, borderRadius: 4 },
+  progTrack: { height: 4, backgroundColor: Colors.border_light, borderRadius: 4, overflow: 'hidden' },
+  progFill:  { height: 4, backgroundColor: Colors.primary, borderRadius: 4 },
 
-  // View all button
-  viewBtn: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    justifyContent:    'center',
-    backgroundColor:   Colors.header_dark,
-    borderRadius:      12,
-    paddingHorizontal: 14,
-    paddingVertical:   15,
-    gap:               8,
-  },
+  // ── Bottom Button ─────────────────────────────────────────────────────────
+  viewBtn:     { alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.header_dark, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 15 },
   viewBtnText: { color: Colors.text_white, fontSize: F.f14, fontWeight: '600' },
 
+  // ── States ────────────────────────────────────────────────────────────────
+  errorState: { alignItems: 'center', paddingVertical: 40, gap: 10 },
+  errorEmoji: { fontSize: 34 },
+  errorTxt:   { fontSize: F.f13, color: Colors.text_label, textAlign: 'center' },
+  retryBtn:   { backgroundColor: Colors.primary, borderRadius: 8, paddingHorizontal: 20, paddingVertical: 10, marginTop: 4 },
+  retryTxt:   { color: Colors.text_white, fontSize: F.f13, fontWeight: '600' },
+  emptyState: { alignItems: 'center', paddingVertical: 40 },
+  emptyEmoji: { fontSize: 34, marginBottom: 10 },
+  emptyTxt:   { fontSize: F.f13, color: Colors.text_label },
 });

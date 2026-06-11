@@ -12,11 +12,26 @@ import {
   TextInput,
   Modal,
   Alert,
+  useWindowDimensions,
 } from 'react-native';
 import { insertExpense } from '../../Api/ApiService';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 1. CONSTANTS
+// 1. RESPONSIVE HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+const BASE_WIDTH = 375;
+
+const fs = (size, winW) => {
+  const ratio = winW / BASE_WIDTH;
+  const scaled = size * ratio;
+  return clamp(scaled, size * 0.82, size * 1.18);
+};
+
+const clamp = (val, min, max) => Math.min(Math.max(val, min), max);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 2. COLORS
 // ─────────────────────────────────────────────────────────────────────────────
 
 const Colors = {
@@ -36,13 +51,8 @@ const Colors = {
   red_bg:       'rgba(239,68,68,0.12)',
 };
 
-const F = {
-  f10: 10, f11: 11, f12: 12, f13: 13,
-  f14: 14, f15: 15, f16: 16, f18: 18, f20: 20,
-};
-
 // ─────────────────────────────────────────────────────────────────────────────
-// 2. DATA
+// 3. DATA
 // ─────────────────────────────────────────────────────────────────────────────
 
 const CATEGORIES = [
@@ -109,56 +119,185 @@ const CATEGORIES = [
 const DONE_BY = ['Manoj', 'Nitesh', 'Chetan'];
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 3. HELPER
+// 4. HELPER
 // ─────────────────────────────────────────────────────────────────────────────
 
 const formatExpenseDateTime = (dateStr) => {
-
   if (!dateStr) return '';
-
-  // Support:
-  // 27/05/2026
-  // 27-05-2026
-  // 27.05.2026
-
-  const cleanedDate = dateStr
-    .replace(/\./g, '/')
-    .replace(/-/g, '/');
-
+  const cleanedDate = dateStr.replace(/\./g, '/').replace(/-/g, '/');
   const parts = cleanedDate.split('/');
-
   if (parts.length !== 3) {
-
-    console.log(
-      '❌ INVALID DATE FORMAT =>',
-      dateStr
-    );
-
+    console.log('❌ INVALID DATE FORMAT =>', dateStr);
     return '';
   }
-
   const [dd, mm, yyyy] = parts;
-
   return `${yyyy}-${mm}-${dd} 10:30:00`;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 4. REUSABLE SMALL COMPONENTS
+// 5. CALENDAR
 // ─────────────────────────────────────────────────────────────────────────────
 
-const FieldLabel = ({ text }) => (
+const DAYS_SHORT = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+const MONTHS_LONG = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+const CalendarPicker = ({ visible, selectedDate, onSelect, onClear, onClose }) => {
+  const today = new Date();
+  const [viewYear,  setViewYear]  = useState(today.getFullYear());
+  const [viewMonth, setViewMonth] = useState(today.getMonth());
+
+  const parseDate = (str) => {
+    const [dd, mm, yyyy] = str.split('/');
+    return new Date(Number(yyyy), Number(mm) - 1, Number(dd));
+  };
+
+  const goMonth = (delta) => {
+    let m = viewMonth + delta, y = viewYear;
+    if (m > 11) { m = 0;  y++; }
+    if (m <  0) { m = 11; y--; }
+    setViewMonth(m);
+    setViewYear(y);
+  };
+
+  const buildGrid = () => {
+    const firstWeekday = new Date(viewYear, viewMonth, 1).getDay();
+    const daysInMonth  = new Date(viewYear, viewMonth + 1, 0).getDate();
+    const daysInPrev   = new Date(viewYear, viewMonth, 0).getDate();
+    const cells = [];
+    for (let i = firstWeekday - 1; i >= 0; i--)
+      cells.push({ day: daysInPrev - i, cur: false });
+    for (let d = 1; d <= daysInMonth; d++)
+      cells.push({ day: d, cur: true });
+    while (cells.length % 7 !== 0 || cells.length < 35)
+      cells.push({ day: cells.length - daysInMonth - firstWeekday + 1, cur: false });
+    return cells;
+  };
+
+  const cells = buildGrid();
+
+  const isSelected = (cell) => {
+    if (!cell.cur || !selectedDate) return false;
+    const s = parseDate(selectedDate);
+    return (
+      s.getDate()     === cell.day &&
+      s.getMonth()    === viewMonth &&
+      s.getFullYear() === viewYear
+    );
+  };
+
+  const isToday = (cell) => {
+    if (!cell.cur) return false;
+    return (
+      cell.day  === today.getDate() &&
+      viewMonth === today.getMonth() &&
+      viewYear  === today.getFullYear()
+    );
+  };
+
+  const handleSelect = (cell) => {
+    if (!cell.cur) return;
+    const picked = new Date(viewYear, viewMonth, cell.day);
+    const dd = String(picked.getDate()).padStart(2, '0');
+    const mm = String(picked.getMonth() + 1).padStart(2, '0');
+    onSelect(`${dd}/${mm}/${picked.getFullYear()}`);
+    onClose();
+  };
+
+  const handleToday = () => {
+    const dd = String(today.getDate()).padStart(2, '0');
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    onSelect(`${dd}/${mm}/${today.getFullYear()}`);
+    onClose();
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <TouchableOpacity style={calStyles.backdrop} activeOpacity={1} onPress={onClose} />
+      <View style={calStyles.card}>
+
+        {/* Month/Year header */}
+        <View style={calStyles.headerRow}>
+          <TouchableOpacity style={calStyles.monthBtn} activeOpacity={0.7}>
+            <Text style={calStyles.monthText}>{MONTHS_LONG[viewMonth]} {viewYear}</Text>
+            <Text style={calStyles.monthArrow}>▾</Text>
+          </TouchableOpacity>
+          <View style={calStyles.navBtns}>
+            <TouchableOpacity style={calStyles.navBtn} onPress={() => goMonth(-1)} activeOpacity={0.7}>
+              <Text style={calStyles.navArrow}>↑</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={calStyles.navBtn} onPress={() => goMonth(1)} activeOpacity={0.7}>
+              <Text style={calStyles.navArrow}>↓</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Day labels */}
+        <View style={calStyles.dayLabelRow}>
+          {DAYS_SHORT.map((d, i) => (
+            <Text key={i} style={calStyles.dayLabel}>{d}</Text>
+          ))}
+        </View>
+
+        {/* Grid */}
+        <View style={calStyles.grid}>
+          {cells.map((cell, i) => {
+            const sel = isSelected(cell);
+            const tod = isToday(cell) && !sel;
+            return (
+              <TouchableOpacity
+                key={i}
+                style={[calStyles.cell, sel && calStyles.cellSelected]}
+                onPress={() => handleSelect(cell)}
+                activeOpacity={cell.cur ? 0.7 : 1}
+              >
+                <Text style={[
+                  calStyles.cellText,
+                  !cell.cur && calStyles.cellTextOther,
+                  tod        && calStyles.cellTextToday,
+                  sel        && calStyles.cellTextSel,
+                ]}>
+                  {cell.day}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {/* Footer */}
+        <View style={calStyles.footer}>
+          <TouchableOpacity onPress={() => { onClear(); onClose(); }} activeOpacity={0.7}>
+            <Text style={calStyles.footerClear}>Clear</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleToday} activeOpacity={0.7}>
+            <Text style={calStyles.footerToday}>Today</Text>
+          </TouchableOpacity>
+        </View>
+
+      </View>
+    </Modal>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 6. REUSABLE SMALL COMPONENTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+const FieldLabel = ({ text, winW }) => (
   <View style={styles.fieldLabelRow}>
     <View style={styles.fieldDot} />
-    <Text style={styles.fieldLabelText}>{text}</Text>
+    <Text style={[styles.fieldLabelText, { fontSize: fs(11, winW) }]}>{text}</Text>
   </View>
 );
 
-const FormInput = ({ placeholder, value, onChangeText, keyboardType }) => {
+const FormInput = ({ placeholder, value, onChangeText, keyboardType, winW }) => {
   const [focused, setFocused] = useState(false);
   return (
     <View style={[styles.inputWrap, focused && styles.inputWrapFocused]}>
       <TextInput
-        style={styles.input}
+        style={[styles.input, { fontSize: fs(13, winW) }]}
         placeholder={placeholder}
         placeholderTextColor={Colors.text_grey}
         value={value}
@@ -171,12 +310,12 @@ const FormInput = ({ placeholder, value, onChangeText, keyboardType }) => {
   );
 };
 
-const TextAreaInput = ({ placeholder, value, onChangeText }) => {
+const TextAreaInput = ({ placeholder, value, onChangeText, winW }) => {
   const [focused, setFocused] = useState(false);
   return (
     <View style={[styles.inputWrap, styles.inputWrapMulti, focused && styles.inputWrapFocused]}>
       <TextInput
-        style={[styles.input, styles.inputMulti]}
+        style={[styles.input, styles.inputMulti, { fontSize: fs(13, winW) }]}
         placeholder={placeholder}
         placeholderTextColor={Colors.text_grey}
         value={value}
@@ -190,15 +329,15 @@ const TextAreaInput = ({ placeholder, value, onChangeText }) => {
   );
 };
 
-const AmountInput = ({ value, onChangeText }) => {
+const AmountInput = ({ value, onChangeText, winW }) => {
   const [focused, setFocused] = useState(false);
   return (
     <View style={[styles.amtWrap, focused && styles.inputWrapFocused]}>
       <View style={styles.amtPrefix}>
-        <Text style={styles.amtSymbol}>₹</Text>
+        <Text style={[styles.amtSymbol, { fontSize: fs(16, winW) }]}>₹</Text>
       </View>
       <TextInput
-        style={[styles.input, { paddingHorizontal: 12 }]}
+        style={[styles.input, { paddingHorizontal: 12, fontSize: fs(13, winW) }]}
         placeholder="Enter amount"
         placeholderTextColor={Colors.text_grey}
         value={value}
@@ -212,10 +351,10 @@ const AmountInput = ({ value, onChangeText }) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 5. DONE-BY DROPDOWN
+// 7. DONE-BY DROPDOWN
 // ─────────────────────────────────────────────────────────────────────────────
 
-const DoneByDropdown = ({ value, onSelect }) => {
+const DoneByDropdown = ({ value, onSelect, winW }) => {
   const [open, setOpen] = useState(false);
   return (
     <View>
@@ -228,10 +367,18 @@ const DoneByDropdown = ({ value, onSelect }) => {
         onPress={() => setOpen(!open)}
         activeOpacity={0.8}
       >
-        <Text style={[styles.input, !value && { color: Colors.text_grey }]}>
+        <Text
+          numberOfLines={1}
+          ellipsizeMode="tail"
+          style={[
+            styles.input,
+            { fontSize: fs(13, winW), flex: 1, minWidth: 0 },
+            !value && { color: Colors.text_grey },
+          ]}
+        >
           {value || 'Select person'}
         </Text>
-        <Text style={{ color: Colors.text_grey, fontSize: F.f12 }}>
+        <Text style={{ color: Colors.text_grey, fontSize: fs(12, winW), flexShrink: 0 }}>
           {open ? '▲' : '▼'}
         </Text>
       </TouchableOpacity>
@@ -249,10 +396,20 @@ const DoneByDropdown = ({ value, onSelect }) => {
               onPress={() => { onSelect(name); setOpen(false); }}
               activeOpacity={0.7}
             >
-              <Text style={[styles.ddItemText, value === name && styles.ddItemTextActive]}>
+              <Text
+                style={[
+                  styles.ddItemText,
+                  { fontSize: fs(13, winW), flex: 1, minWidth: 0 },
+                  value === name && styles.ddItemTextActive,
+                ]}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
                 {name}
               </Text>
-              {value === name && <Text style={styles.ddCheck}>✓</Text>}
+              {value === name && (
+                <Text style={[styles.ddCheck, { fontSize: fs(13, winW), flexShrink: 0 }]}>✓</Text>
+              )}
             </TouchableOpacity>
           ))}
         </View>
@@ -262,15 +419,19 @@ const DoneByDropdown = ({ value, onSelect }) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 6. EXPENSE MODAL (bottom sheet)
+// 8. EXPENSE MODAL (bottom sheet)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const ExpenseModal = ({ visible, property, onClose }) => {
-  const [date,    setDate]    = useState('');
-  const [details, setDetails] = useState('');
-  const [amount,  setAmount]  = useState('');
-  const [doneBy,  setDoneBy]  = useState('');
-  const [loading, setLoading] = useState(false);
+  const { width: winW } = useWindowDimensions();
+  const hPad = clamp(winW * 0.042, 14, 20);
+
+  const [date,     setDate]     = useState('');
+  const [calOpen,  setCalOpen]  = useState(false); // ✅ Calendar state
+  const [details,  setDetails]  = useState('');
+  const [amount,   setAmount]   = useState('');
+  const [doneBy,   setDoneBy]   = useState('');
+  const [loading,  setLoading]  = useState(false);
 
   const reset = () => {
     setDate(''); setDetails(''); setAmount(''); setDoneBy('');
@@ -287,10 +448,8 @@ const ExpenseModal = ({ visible, property, onClose }) => {
 
       const expenseData = {
         Category:
-  property?.badge === 'Farmhouse'
-    ? 'Farmhouse'
-    : 'Airbnb',
-        PropertyName: property?.label || '',
+          property?.badge === 'Farmhouse' ? 'Farmhouse' : 'Airbnb',
+        PropertyName:   property?.label || '',
         ExpenseDtTm:    formatExpenseDateTime(date),
         ExpenseDetails: details,
         ExpenseAmount:  amount,
@@ -339,24 +498,30 @@ const ExpenseModal = ({ visible, property, onClose }) => {
         <View style={styles.modalHandle} />
 
         {/* Header */}
-        <View style={styles.modalHdr}>
-          <View style={[styles.modalIconBox, { backgroundColor: property.iconBg }]}>
+        <View style={[styles.modalHdr, { paddingHorizontal: hPad }]}>
+          <View style={[styles.modalIconBox, { backgroundColor: property.iconBg, flexShrink: 0 }]}>
             <Image
               source={property.icon}
               style={[styles.modalIconImg, { tintColor: property.iconTint }]}
               resizeMode="contain"
             />
           </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.modalTitle}>{property.label}</Text>
-            <Text style={styles.modalSub}>Add Expense</Text>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text
+              numberOfLines={1}
+              ellipsizeMode="tail"
+              style={[styles.modalTitle, { fontSize: fs(15, winW) }]}
+            >
+              {property.label}
+            </Text>
+            <Text style={[styles.modalSub, { fontSize: fs(11, winW) }]}>Add Expense</Text>
           </View>
           <TouchableOpacity
-            style={styles.modalCloseBtn}
+            style={[styles.modalCloseBtn, { flexShrink: 0 }]}
             onPress={() => { reset(); onClose(); }}
             activeOpacity={0.7}
           >
-            <Text style={styles.modalCloseX}>✕</Text>
+            <Text style={[styles.modalCloseX, { fontSize: fs(13, winW) }]}>✕</Text>
           </TouchableOpacity>
         </View>
 
@@ -365,88 +530,134 @@ const ExpenseModal = ({ visible, property, onClose }) => {
         {/* Form */}
         <ScrollView
           style={styles.modalBody}
-          contentContainerStyle={styles.modalBodyContent}
+          contentContainerStyle={[
+            styles.modalBodyContent,
+            {
+              paddingHorizontal: hPad,
+              paddingBottom: Platform.OS === 'ios' ? 34 + 16 : 80,
+            },
+          ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
+          {/* ✅ DATE FIELD — Calendar ke saath */}
           <View>
-            <FieldLabel text="EXPENSE DATE" />
-            <FormInput
-              placeholder="dd/mm/yyyy"
-              value={date}
-              onChangeText={setDate}
-              keyboardType="numeric"
-            />
+            <FieldLabel text="EXPENSE DATE" winW={winW} />
+            <TouchableOpacity
+              style={[
+                styles.inputWrap,
+                { justifyContent: 'space-between' },
+                date && styles.inputWrapFocused,
+              ]}
+              activeOpacity={0.8}
+              onPress={() => setCalOpen(true)}
+            >
+              <Text style={[
+                styles.input,
+                { fontSize: fs(13, winW) },
+                !date && { color: Colors.text_grey },
+              ]}>
+                {date || 'dd/mm/yyyy'}
+              </Text>
+              <Image
+                source={require('../../Assets/icons/calendar.png')}
+                style={{ width: 18, height: 18, tintColor: Colors.text_grey, flexShrink: 0 }}
+                resizeMode="contain"
+              />
+            </TouchableOpacity>
           </View>
 
           <View>
-            <FieldLabel text="EXPENSE DETAILS" />
+            <FieldLabel text="EXPENSE DETAILS" winW={winW} />
             <TextAreaInput
               placeholder="Describe the expense..."
               value={details}
               onChangeText={setDetails}
+              winW={winW}
             />
           </View>
 
           <View>
-            <FieldLabel text="EXPENSE AMOUNT" />
-            <AmountInput value={amount} onChangeText={setAmount} />
+            <FieldLabel text="EXPENSE AMOUNT" winW={winW} />
+            <AmountInput value={amount} onChangeText={setAmount} winW={winW} />
           </View>
 
           <View>
-            <FieldLabel text="EXPENSE DONE BY" />
-            <DoneByDropdown value={doneBy} onSelect={setDoneBy} />
+            <FieldLabel text="EXPENSE DONE BY" winW={winW} />
+            <DoneByDropdown value={doneBy} onSelect={setDoneBy} winW={winW} />
           </View>
 
           <TouchableOpacity
-            style={[styles.submitBtn, loading && styles.submitBtnDisabled]}
+            style={[styles.submitBtn, loading && styles.submitBtnDisabled, { width: '100%' }]}
             onPress={handleSubmit}
             activeOpacity={0.85}
             disabled={loading}
           >
             <Image
               source={require('../../Assets/icons/check.png')}
-              style={styles.submitCheckIcon}
+              style={[styles.submitCheckIcon, { flexShrink: 0 }]}
               resizeMode="contain"
             />
-            <Text style={styles.submitText}>
+            <Text
+              numberOfLines={1}
+              ellipsizeMode="tail"
+              style={[styles.submitText, { fontSize: fs(15, winW) }]}
+            >
               {loading ? 'Submitting...' : `Submit ${property.label} Expense`}
             </Text>
           </TouchableOpacity>
         </ScrollView>
       </View>
+
+      {/* ✅ CALENDAR PICKER */}
+      <CalendarPicker
+        visible={calOpen}
+        selectedDate={date}
+        onSelect={(val) => setDate(val)}
+        onClear={() => setDate('')}
+        onClose={() => setCalOpen(false)}
+      />
     </Modal>
   );
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 7. CATEGORY CARD
+// 9. CATEGORY CARD
 // ─────────────────────────────────────────────────────────────────────────────
 
-const CategoryCard = ({ category, onSelectProperty }) => {
+const CategoryCard = ({ category, onSelectProperty, winW }) => {
   const [expanded, setExpanded] = useState(false);
+  const hPad = clamp(winW * 0.037, 12, 18);
 
   return (
-    <View style={styles.catCard}>
+    <View style={[styles.catCard, { overflow: 'hidden' }]}>
 
-      {/* Header — tap karo to toggle list */}
+      {/* Header */}
       <TouchableOpacity
-        style={styles.catHdr}
+        style={[styles.catHdr, { paddingHorizontal: hPad }]}
         onPress={() => setExpanded(!expanded)}
         activeOpacity={0.8}
       >
-        <View style={[styles.catIconBox, { backgroundColor: '#fff', borderWidth: 1 }]}>
+        <View style={[styles.catIconBox, { backgroundColor: '#fff', borderWidth: 1, flexShrink: 0 }]}>
           <Image
             source={category.icon}
             style={[styles.catIconImg, { tintColor: category.iconTint }]}
             resizeMode="contain"
           />
         </View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.catName}>{category.label}</Text>
-          <Text style={styles.catSub}>{category.sub}</Text>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text
+            numberOfLines={1}
+            ellipsizeMode="tail"
+            style={[styles.catName, { fontSize: fs(15, winW) }]}
+          >
+            {category.label}
+          </Text>
+          <Text style={[styles.catSub, { fontSize: fs(11, winW) }]}>{category.sub}</Text>
         </View>
-        <Text style={[styles.catArrow, expanded && styles.catArrowUp]}>▼</Text>
+        <Text style={[styles.catArrow, { fontSize: fs(12, winW), flexShrink: 0 }, expanded && styles.catArrowUp]}>
+          ▼
+        </Text>
       </TouchableOpacity>
 
       {/* Property list */}
@@ -457,6 +668,7 @@ const CategoryCard = ({ category, onSelectProperty }) => {
               key={prop.key}
               style={[
                 styles.propRow,
+                { paddingHorizontal: hPad },
                 i < category.properties.length - 1 && styles.propRowBorder,
               ]}
               onPress={() => {
@@ -465,18 +677,24 @@ const CategoryCard = ({ category, onSelectProperty }) => {
               }}
               activeOpacity={0.75}
             >
-              <View style={[styles.propIconBox, { backgroundColor: prop.iconBg, borderWidth: 1 }]}>
+              <View style={[styles.propIconBox, { backgroundColor: prop.iconBg, borderWidth: 1, flexShrink: 0 }]}>
                 <Image
                   source={prop.icon}
                   style={styles.propIconImg}
                   resizeMode="contain"
                 />
               </View>
-              <Text style={styles.propName}>{prop.label}</Text>
-              <View style={styles.propBadge}>
-                <Text style={styles.propBadgeText}>{prop.badge}</Text>
+              <Text
+                numberOfLines={1}
+                ellipsizeMode="tail"
+                style={[styles.propName, { flex: 1, minWidth: 0, fontSize: fs(13, winW) }]}
+              >
+                {prop.label}
+              </Text>
+              <View style={[styles.propBadge, { flexShrink: 0 }]}>
+                <Text style={[styles.propBadgeText, { fontSize: fs(10, winW) }]}>{prop.badge}</Text>
               </View>
-              <Text style={styles.propChevron}>›</Text>
+              <Text style={[styles.propChevron, { fontSize: fs(20, winW), flexShrink: 0 }]}>›</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -486,12 +704,15 @@ const CategoryCard = ({ category, onSelectProperty }) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 8. MAIN SCREEN
+// 10. MAIN SCREEN
 // ─────────────────────────────────────────────────────────────────────────────
 
 const ExpensesScreen = ({ navigation }) => {
-  const [selectedProp, setSelectedProp] = useState(null);
-  const [modalVisible, setModalVisible] = useState(false);
+  const { width: winW } = useWindowDimensions();
+  const hPad = clamp(winW * 0.037, 12, 18);
+
+  const [selectedProp,  setSelectedProp]  = useState(null);
+  const [modalVisible,  setModalVisible]  = useState(false);
 
   const handleSelectProperty = (prop) => {
     setSelectedProp(prop);
@@ -503,9 +724,9 @@ const ExpensesScreen = ({ navigation }) => {
       <StatusBar backgroundColor={Colors.bg_dark} barStyle="light-content" />
 
       {/* HEADER */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingHorizontal: hPad }]}>
         <TouchableOpacity
-          style={styles.backBtn}
+          style={[styles.backBtn, { flexShrink: 0 }]}
           onPress={() => navigation.goBack()}
           activeOpacity={0.8}
         >
@@ -515,9 +736,21 @@ const ExpensesScreen = ({ navigation }) => {
             resizeMode="contain"
           />
         </TouchableOpacity>
-        <View style={styles.headerTitleBlock}>
-          <Text style={styles.headerTitle}>Expenses</Text>
-          <Text style={styles.headerSubtitle}>Select property to record expense</Text>
+        <View style={{ flex: 1, minWidth: 0, zIndex: 2 }}>
+          <Text
+            numberOfLines={1}
+            ellipsizeMode="tail"
+            style={[styles.headerTitle, { fontSize: fs(18, winW) }]}
+          >
+            Expenses
+          </Text>
+          <Text
+            numberOfLines={1}
+            ellipsizeMode="tail"
+            style={[styles.headerSubtitle, { fontSize: fs(13, winW) }]}
+          >
+            Select property to record expense
+          </Text>
         </View>
         <View style={styles.circle1} />
         <View style={styles.goldLine} />
@@ -526,7 +759,10 @@ const ExpensesScreen = ({ navigation }) => {
       {/* BODY */}
       <ScrollView
         style={styles.body}
-        contentContainerStyle={styles.bodyContent}
+        contentContainerStyle={[
+          styles.bodyContent,
+          { paddingHorizontal: hPad, paddingBottom: 80 },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         {CATEGORIES.map((cat) => (
@@ -534,6 +770,7 @@ const ExpensesScreen = ({ navigation }) => {
             key={cat.key}
             category={cat}
             onSelectProperty={handleSelectProperty}
+            winW={winW}
           />
         ))}
       </ScrollView>
@@ -551,7 +788,7 @@ const ExpensesScreen = ({ navigation }) => {
 export default ExpensesScreen;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 9. STYLES
+// 11. STYLES
 // ─────────────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
@@ -564,14 +801,14 @@ const styles = StyleSheet.create({
   // ── Header ────────────────────────────────────────────────────────────────
 
   header: {
-    backgroundColor:   Colors.bg_dark,
-    paddingHorizontal: 20,
-    paddingTop:        8,
-    paddingBottom:     24,
-    flexDirection:     'row',
-    alignItems:        'center',
-    overflow:          'hidden',
-    marginTop:         27,
+    backgroundColor: Colors.bg_dark,
+    paddingTop:      8,
+    paddingBottom:   24,
+    flexDirection:   'row',
+    alignItems:      'center',
+    overflow:        'hidden',
+    marginTop:       27,
+    gap:             14,
   },
   backBtn: {
     width:           40,
@@ -580,7 +817,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.10)',
     alignItems:      'center',
     justifyContent:  'center',
-    marginRight:     14,
     zIndex:          2,
   },
   backIcon: {
@@ -588,16 +824,13 @@ const styles = StyleSheet.create({
     height:    18,
     tintColor: Colors.text_white,
   },
-  headerTitleBlock: { flex: 1, zIndex: 2 },
   headerTitle: {
     color:        Colors.text_white,
-    fontSize:     F.f18,
     fontWeight:   'bold',
     marginBottom: 3,
   },
   headerSubtitle: {
-    color:    Colors.text_grey,
-    fontSize: F.f13,
+    color: Colors.text_grey,
   },
   circle1: {
     position:        'absolute',
@@ -623,10 +856,8 @@ const styles = StyleSheet.create({
 
   body:        { flex: 1, backgroundColor: Colors.page_bg },
   bodyContent: {
-    paddingHorizontal: 14,
-    paddingTop:        18,
-    paddingBottom:     30,
-    gap:               12,
+    paddingTop: 18,
+    gap:        12,
   },
 
   // ── Category Card ─────────────────────────────────────────────────────────
@@ -643,11 +874,10 @@ const styles = StyleSheet.create({
     }),
   },
   catHdr: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    gap:               12,
-    paddingHorizontal: 14,
-    paddingVertical:   14,
+    flexDirection:   'row',
+    alignItems:      'center',
+    gap:             12,
+    paddingVertical: 14,
   },
   catIconBox: {
     width:          38,
@@ -663,17 +893,14 @@ const styles = StyleSheet.create({
   },
   catName: {
     color:      Colors.text_dark,
-    fontSize:   F.f15,
     fontWeight: '700',
   },
   catSub: {
     color:     Colors.text_grey,
-    fontSize:  F.f11,
     marginTop: 1,
   },
   catArrow: {
-    color:    Colors.text_grey,
-    fontSize: F.f12,
+    color: Colors.text_grey,
   },
   catArrowUp: {
     transform: [{ rotate: '180deg' }],
@@ -686,11 +913,10 @@ const styles = StyleSheet.create({
     borderColor:    Colors.divider,
   },
   propRow: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    gap:               12,
-    paddingHorizontal: 14,
-    paddingVertical:   12,
+    flexDirection:   'row',
+    alignItems:      'center',
+    gap:             12,
+    paddingVertical: 12,
   },
   propRowBorder: {
     borderBottomWidth: 0.5,
@@ -710,9 +936,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   propName: {
-    flex:       1,
     color:      Colors.text_dark,
-    fontSize:   F.f13,
     fontWeight: '600',
   },
   propBadge: {
@@ -723,13 +947,11 @@ const styles = StyleSheet.create({
   },
   propBadgeText: {
     color:         Colors.text_label,
-    fontSize:      F.f10,
     fontWeight:    '700',
     letterSpacing: 0.4,
   },
   propChevron: {
     color:      Colors.text_grey,
-    fontSize:   F.f20,
     marginLeft: 4,
   },
 
@@ -759,11 +981,10 @@ const styles = StyleSheet.create({
     marginBottom:    6,
   },
   modalHdr: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    gap:               12,
-    paddingHorizontal: 16,
-    paddingVertical:   12,
+    flexDirection:   'row',
+    alignItems:      'center',
+    gap:             12,
+    paddingVertical: 12,
   },
   modalIconBox: {
     width:          38,
@@ -778,12 +999,10 @@ const styles = StyleSheet.create({
   },
   modalTitle: {
     color:      Colors.text_dark,
-    fontSize:   F.f15,
     fontWeight: '700',
   },
   modalSub: {
     color:     Colors.text_grey,
-    fontSize:  F.f11,
     marginTop: 1,
   },
   modalCloseBtn: {
@@ -796,7 +1015,6 @@ const styles = StyleSheet.create({
   },
   modalCloseX: {
     color:      Colors.text_grey,
-    fontSize:   F.f13,
     fontWeight: '700',
   },
   modalDivider: {
@@ -805,10 +1023,8 @@ const styles = StyleSheet.create({
   },
   modalBody:        { flex: 0 },
   modalBodyContent: {
-    paddingHorizontal: 16,
-    paddingTop:        14,
-    paddingBottom:     30,
-    gap:               14,
+    paddingTop: 14,
+    gap:        14,
   },
 
   // ── Field Label ───────────────────────────────────────────────────────────
@@ -824,10 +1040,10 @@ const styles = StyleSheet.create({
     height:          4,
     borderRadius:    2,
     backgroundColor: Colors.primary,
+    flexShrink:      0,
   },
   fieldLabelText: {
     color:         Colors.text_label,
-    fontSize:      F.f11,
     fontWeight:    '700',
     letterSpacing: 0.8,
   },
@@ -855,8 +1071,8 @@ const styles = StyleSheet.create({
   },
   input: {
     flex:     1,
+    minWidth: 0,
     color:    Colors.text_dark,
-    fontSize: F.f13,
     padding:  0,
   },
   inputMulti: {
@@ -886,10 +1102,10 @@ const styles = StyleSheet.create({
     justifyContent:         'center',
     borderRightWidth:       1,
     borderRightColor:       Colors.inputBorder,
+    flexShrink:             0,
   },
   amtSymbol: {
     color:      Colors.primary,
-    fontSize:   F.f16,
     fontWeight: '700',
   },
 
@@ -923,7 +1139,6 @@ const styles = StyleSheet.create({
   },
   ddItemText: {
     color:      Colors.text_dark,
-    fontSize:   F.f13,
     fontWeight: '500',
   },
   ddItemTextActive: {
@@ -932,7 +1147,6 @@ const styles = StyleSheet.create({
   },
   ddCheck: {
     color:      Colors.primary,
-    fontSize:   F.f13,
     fontWeight: '700',
   },
 
@@ -947,19 +1161,97 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     marginTop:       4,
     gap:             8,
+    width:           '100%',
   },
   submitBtnDisabled: {
     opacity: 0.6,
   },
   submitCheckIcon: {
-    width:     20,
-    height:    20,
-    tintColor: Colors.primary,
+    width:      20,
+    height:     20,
+    tintColor:  Colors.primary,
+    flexShrink: 0,
   },
   submitText: {
     color:         Colors.text_white,
-    fontSize:      F.f15,
     fontWeight:    '700',
     letterSpacing: 0.3,
   },
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 12. CALENDAR STYLES
+// ─────────────────────────────────────────────────────────────────────────────
+
+const calStyles = StyleSheet.create({
+  backdrop: {
+    position:        'absolute',
+    top:             0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  card: {
+    position:        'absolute',
+    top:             '20%',
+    alignSelf:       'center',
+    width:           300,
+    backgroundColor: Colors.card_bg,
+    borderRadius:    18,
+    padding:         20,
+    ...Platform.select({
+      ios:     { shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.18, shadowRadius: 20 },
+      android: { elevation: 14 },
+    }),
+  },
+  headerRow: {
+    flexDirection:  'row',
+    alignItems:     'center',
+    justifyContent: 'space-between',
+    marginBottom:   18,
+  },
+  monthBtn:   { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  monthText:  { color: Colors.text_dark, fontSize: 16, fontWeight: '700' },
+  monthArrow: { color: Colors.text_grey, fontSize: 12 },
+  navBtns:    { flexDirection: 'row', gap: 16 },
+  navBtn:     { padding: 4 },
+  navArrow:   { color: Colors.text_dark, fontSize: 18, fontWeight: '300' },
+  dayLabelRow: {
+    flexDirection:  'row',
+    justifyContent: 'space-around',
+    marginBottom:   8,
+  },
+  dayLabel: {
+    width:      32,
+    textAlign:  'center',
+    color:      Colors.text_grey,
+    fontSize:   13,
+    fontWeight: '600',
+  },
+  grid: {
+    flexDirection: 'row',
+    flexWrap:      'wrap',
+    justifyContent: 'space-around',
+    rowGap:        4,
+  },
+  cell: {
+    width:          32,
+    height:         36,
+    alignItems:     'center',
+    justifyContent: 'center',
+    borderRadius:   8,
+  },
+  cellSelected:    { backgroundColor: '#1D6AFF', borderRadius: 10 },
+  cellText:        { color: Colors.text_dark, fontSize: 14 },
+  cellTextOther:   { color: Colors.text_grey },
+  cellTextToday:   { color: '#1D6AFF', fontWeight: '700' },
+  cellTextSel:     { color: '#FFFFFF', fontWeight: '700' },
+  footer: {
+    flexDirection:  'row',
+    justifyContent: 'space-between',
+    marginTop:      18,
+    paddingTop:     14,
+    borderTopWidth: 1,
+    borderColor:    Colors.inputBorder,
+  },
+  footerClear: { color: '#1D6AFF', fontSize: 14, fontWeight: '600' },
+  footerToday: { color: '#1D6AFF', fontSize: 14, fontWeight: '600' },
 });

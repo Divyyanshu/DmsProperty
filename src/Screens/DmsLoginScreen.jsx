@@ -13,8 +13,12 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  Dimensions,
 } from 'react-native';
 import { loginUser } from '../Api/ApiService';
+
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+const BOTTOM_SPACE = Platform.OS === 'ios' ? 34 : 16;
 
 // ─── Colors ───────────────────────────────────────────────────────────────────
 
@@ -156,7 +160,6 @@ const DmsLoginScreen = ({ navigation }) => {
   const handleSignIn = async () => {
     setGlobalError(false);
 
-    // ── Step 1: Validate fields ──────────────────────────────────────
     const uErr = validateUsername(username);
     const pErr = validatePassword(password);
     setUsernameError(uErr || '');
@@ -171,28 +174,18 @@ const DmsLoginScreen = ({ navigation }) => {
       return;
     }
 
-    // ── Step 2: Call real login API ──────────────────────────────────
     setBtnState(BTN_LOADING);
-
     const result = await loginUser(username.trim(), password);
 
     if (result.success) {
-      // ── Success ─────────────────────────────────────────────────
       setBtnState(BTN_SUCCESS);
       Alert.alert(
         '✅ Login Successful',
         `Welcome back!\nRedirecting to Dashboard...`,
-        [
-          {
-            text: 'Continue',
-            onPress: () => navigation.replace('DashboardScreen'),
-          },
-        ],
+        [{ text: 'Continue', onPress: () => navigation.replace('DashboardScreen') }],
         { cancelable: false }
       );
-
     } else {
-      // ── Error ────────────────────────────────────────────────────
       setBtnState(BTN_IDLE);
       setGlobalError(true);
       Alert.alert(
@@ -202,10 +195,7 @@ const DmsLoginScreen = ({ navigation }) => {
           {
             text: 'Try Again',
             style: 'destructive',
-            onPress: () => {
-              setPassword('');
-              setGlobalError(false);
-            },
+            onPress: () => { setPassword(''); setGlobalError(false); },
           },
           { text: 'Cancel', style: 'cancel' },
         ]
@@ -217,13 +207,17 @@ const DmsLoginScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar backgroundColor={Colors.bg_dark} barStyle="light-content" />
+      <StatusBar backgroundColor={Colors.bg_dark} barStyle="light-content" translucent={false} />
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'android' ? StatusBar.currentHeight ?? 24 : 0}
       >
         <ScrollView
-          contentContainerStyle={[styles.scrollContent, { paddingBottom: 40 }]}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: BOTTOM_SPACE + 24 },
+          ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
@@ -311,7 +305,7 @@ const DmsLoginScreen = ({ navigation }) => {
               passwordError ? styles.inputError : null,
             ]}>
               <Image
-                source={require("../Assets/icons/dmspass.png")}
+                source={require('../Assets/icons/dmspass.png')}
                 style={[
                   styles.inputIcon,
                   { tintColor: passwordFocused ? Colors.primary : Colors.inputIcon },
@@ -332,6 +326,8 @@ const DmsLoginScreen = ({ navigation }) => {
                 returnKeyType="done"
                 onSubmitEditing={handleSignIn}
                 editable={!isLoading && !isSuccess}
+               keyboardType="email-address"
+
               />
               <TouchableOpacity
                 onPress={() => setShowPassword(prev => !prev)}
@@ -400,8 +396,6 @@ const DmsLoginScreen = ({ navigation }) => {
               )}
             </TouchableOpacity>
 
-            
-
           </View>
 
         </ScrollView>
@@ -416,21 +410,23 @@ const styles = StyleSheet.create({
 
   safeArea: {
     flex: 1,
-    backgroundColor: Colors.bg_dark,
+    backgroundColor: Colors.bg_light,
   },
 
   flex: { flex: 1 },
 
-  scrollContent: { flexGrow: 1 },
+  scrollContent: {
+    flexGrow: 1,
+  },
 
   // ── Header ────────────────────────────────────────────────────────────
 
   header: {
     backgroundColor: Colors.bg_dark,
     paddingHorizontal: CommonWidths.width20,
-    paddingTop: CommonHeights.height8,
+    paddingTop: CommonHeights.height16,
+    paddingBottom: CommonHeights.height8,
     overflow: 'hidden',
-    marginTop: 15,
   },
 
   circle1: {
@@ -464,8 +460,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
     borderRadius: 2,
     marginTop: CommonHeights.height16,
-    
-    
+    marginBottom: CommonHeights.height16,
   },
 
   appIdentity: {
@@ -506,7 +501,8 @@ const styles = StyleSheet.create({
   // ── Form Card ──────────────────────────────────────────────────────────
 
   formCard: {
-    flex: 1,
+    flexGrow: 1,
+    minHeight: SCREEN_HEIGHT * 0.68,
     backgroundColor: Colors.bg_light,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,

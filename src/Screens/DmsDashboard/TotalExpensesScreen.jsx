@@ -1,4 +1,4 @@
-import React, { useState, useEffect,  } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,8 +9,12 @@ import {
   Image,
   ScrollView,
   Platform,
-  Alert,
+  Modal,
+  FlatList,
+  TouchableWithoutFeedback,
+  Keyboard,
   ActivityIndicator,
+  TextInput,
 } from 'react-native';
 import FarmhouseExpenses from './Modals/FarmhousExpenses';
 import AirbnbExpenses   from './Modals/AirbnbExpenses';
@@ -21,8 +25,7 @@ import { getExpenses }  from '../../Api/ApiService';
 // ─────────────────────────────────────────────────────────────────────────────
 
 const Colors = {
-  header_dark:    '#0D4F4A',
-  header_mid:     '#0F766E',
+  header_dark:    '#0F172A',
   primary:        '#0F766E',
   primary_light:  '#CCFBF1',
   primary_border: '#99F6E4',
@@ -40,7 +43,7 @@ const Colors = {
   border:         '#B2DFDB',
   border_light:   '#E0F2F1',
   border_white:   'rgba(255,255,255,0.12)',
-  strip_bg:       'rgba(255,255,255,0.10)',
+  strip_bg:       'rgba(255,255,255,0.08)',
   icon_cyan:      '#CFFAFE',
   icon_yellow:    '#FEF9C3',
 };
@@ -51,310 +54,363 @@ const F = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 2. STATIC DATA
+// 2. PERIOD OPTIONS
 // ─────────────────────────────────────────────────────────────────────────────
 
 const PERIOD_OPTIONS = [
-  { key: 'today',  label: 'Today' },
-  { key: 'month1', label: 'Last Month' },
-  { key: 'month3', label: 'Last 3 Months' },
-  { key: 'month6', label: 'Last 6 Months' },
+  { key: 'today',  label: 'Today',         filterType: 'Today'  },
+  { key: 'month1', label: 'Last Month',    filterType: 'Month1' },
+  { key: 'month3', label: 'Last 3 Months', filterType: 'Month3' },
+  { key: 'month6', label: 'Last 6 Months', filterType: 'Month6' },
+  { key: 'custom', label: 'Custom Range',  filterType: 'Custom' },
 ];
 
+const getFilterType = (key) =>
+  PERIOD_OPTIONS.find(o => o.key === key)?.filterType ?? 'Today';
+
 // ─────────────────────────────────────────────────────────────────────────────
-// 3. ICON HELPER  (API data mein icon nahi hota, so property name se match karo)
+// 3. HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
+
+const formatINR = (num) => {
+  const n = Number(num) || 0;
+  return '₹' + n.toLocaleString('en-IN');
+};
 
 const getPropertyIconConfig = (propertyName = '') => {
   const name = propertyName.toLowerCase();
-  if (name.includes('grey'))    return { icon: require('../../Assets/icons/Greystone.png'),   iconBg: Colors.primary_light, iconTint: Colors.primary_text };
-  if (name.includes('sky'))     return { icon: require('../../Assets/icons/stonestays1.png'),  iconBg: Colors.icon_cyan,    iconTint: Colors.primary };
-  if (name.includes('topaz'))   return { icon: require('../../Assets/icons/stonestays1.png'),  iconBg: Colors.primary_light, iconTint: Colors.primary };
-  if (name.includes('ruby'))    return { icon: require('../../Assets/icons/stonestays1.png'),  iconBg: Colors.icon_yellow,  iconTint: '#92400E' };
-  if (name.includes('sapphire'))return { icon: require('../../Assets/icons/stonestays1.png'),  iconBg: Colors.icon_cyan,    iconTint: Colors.primary };
-  // default fallback
+  if (name.includes('grey'))     return { icon: require('../../Assets/icons/Greystone.png'),  iconBg: Colors.primary_light, iconTint: Colors.primary_text };
+  if (name.includes('sky'))      return { icon: require('../../Assets/icons/stonestays1.png'), iconBg: Colors.icon_cyan,    iconTint: Colors.primary      };
+  if (name.includes('topaz'))    return { icon: require('../../Assets/icons/stonestays1.png'), iconBg: Colors.primary_light, iconTint: Colors.primary      };
+  if (name.includes('ruby'))     return { icon: require('../../Assets/icons/stonestays1.png'), iconBg: Colors.icon_yellow,  iconTint: '#92400E'            };
+  if (name.includes('sapphire')) return { icon: require('../../Assets/icons/stonestays1.png'), iconBg: Colors.icon_cyan,    iconTint: Colors.primary       };
   return { icon: require('../../Assets/icons/stonestays1.png'), iconBg: Colors.primary_light, iconTint: Colors.primary };
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 4. PERIOD PILLS
+// 4. PERIOD DROPDOWN — same as Revenue screen
 // ─────────────────────────────────────────────────────────────────────────────
 
-const PeriodPills = ({ selected, onSelect }) => (
-  <View style={styles.pillRow}>
-    {PERIOD_OPTIONS.map(item => {
-      const isActive = selected === item.key;
-      return (
-        <TouchableOpacity
-          key={item.key}
-          style={[styles.pill, isActive && styles.pillActive]}
-          onPress={() => onSelect(item.key)}
-          activeOpacity={0.75}
-        >
-          <Text style={[styles.pillText, isActive && styles.pillTextActive]}>
-            {item.label}
-          </Text>
-        </TouchableOpacity>
-      );
-    })}
-  </View>
-);
+const PeriodDropdown = ({ selected, onSelect }) => {
+  const [open, setOpen] = useState(false);
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 5. TAB SWITCH
-// ─────────────────────────────────────────────────────────────────────────────
+  const selectedLabel = PERIOD_OPTIONS.find(o => o.key === selected)?.label ?? 'Today';
 
-const TabSwitch = ({ properties, activeKey, onSelect }) => (
-  <View style={styles.tabsWrap}>
-    {properties.map(prop => {
-      const isActive = activeKey === prop.key;
-      return (
-        <TouchableOpacity
-          key={prop.key}
-          style={[styles.tab, isActive && styles.tabActive]}
-          onPress={() => onSelect(prop.key)}
-          activeOpacity={0.75}
-        >
-          <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]}>
-            {prop.label}
-          </Text>
-        </TouchableOpacity>
-      );
-    })}
-  </View>
-);
+  const shortLabel = (lbl) => {
+    if (lbl === 'Today')         return 'Today';
+    if (lbl === 'Last Month')    return '1 Mo';
+    if (lbl === 'Last 3 Months') return '3 Mo';
+    if (lbl === 'Last 6 Months') return '6 Mo';
+    if (lbl === 'Custom Range')  return 'Custom';
+    return lbl;
+  };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 6. PROPERTY SECTION CARD
-// ─────────────────────────────────────────────────────────────────────────────
-
-const PropertySectionCard = ({
-  title,
-  subtitle,
-  categoryIcon,
-  totalAmount,
-  properties,
-  onViewExpenses,
-}) => {
-  const [activeKey, setActiveKey] = useState(properties[0]?.key);
-  const activeProp = properties.find(p => p.key === activeKey) || properties[0];
-
-  // Agar properties change ho (API refetch) toh activeKey reset karo
-  useEffect(() => {
-    if (properties.length > 0) setActiveKey(properties[0].key);
-  }, [properties]);
-
-  if (!activeProp) return null;
+  const handleSelect = (key) => {
+    setOpen(false);
+    Keyboard.dismiss();
+    onSelect(key);
+  };
 
   return (
-    <View style={styles.sectionCard}>
-
-      {/* Card Header */}
-      <View style={styles.sectionCardHdr}>
-        <View style={[styles.sectionCardIconBox, { borderWidth: 1, borderColor: '#b8b8b8' }]}>
-          <Image
-            source={categoryIcon}
-            style={styles.sectionCardIcon}
-            resizeMode="contain"
-          />
+    <>
+      <TouchableOpacity style={styles.periodChip} onPress={() => setOpen(true)} activeOpacity={0.8}>
+        <View style={styles.chipCalIcon}>
+          <View style={styles.chipCalBar} />
+          <View style={styles.chipCalDots}>
+            {[0,1,2,3,4,5].map(i => <View key={i} style={styles.chipCalDot} />)}
+          </View>
         </View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.sectionCardTitle}>{title}</Text>
-          <Text style={styles.sectionCardSub}>{subtitle}</Text>
-        </View>
-        <View style={styles.totalBadge}>
-          <Text style={styles.totalBadgeText}>{totalAmount}</Text>
-        </View>
-      </View>
+        <Text style={styles.chipLabel} numberOfLines={1}>{shortLabel(selectedLabel)}</Text>
+        <Text style={styles.chipArrow}>▾</Text>
+      </TouchableOpacity>
 
-      <View style={styles.sectionCardDivider} />
-
-      {/* Tab Switch */}
-      <View style={styles.sectionCardBody}>
-        <TabSwitch
-          properties={properties}
-          activeKey={activeKey}
-          onSelect={setActiveKey}
-        />
-
-        {/* Active Property Summary */}
-        <View style={styles.propSummary}>
-          <View style={styles.propSummaryLeft}>
-            <View style={[styles.propSummaryIconBox, { borderWidth: 1, borderColor: '#b8b8b8' }]}>
-              <Image
-                source={activeProp.icon}
-                style={styles.propSummaryIcon}
-                resizeMode="contain"
-              />
-            </View>
-            <View>
-              <Text style={styles.propSummaryName}>{activeProp.label}</Text>
-              <View style={styles.propBadgeWrap}>
-                <View style={styles.propBadge}>
-                  <Text style={styles.propBadgeText}>{activeProp.badge}</Text>
+      <Modal visible={open} transparent animationType="slide" onRequestClose={() => setOpen(false)}>
+        <TouchableWithoutFeedback onPress={() => { setOpen(false); Keyboard.dismiss(); }}>
+          <View style={styles.ddOverlay}>
+            <TouchableWithoutFeedback>
+              <View style={styles.ddSheet}>
+                <View style={styles.ddHandle} />
+                <View style={styles.ddSheetHdr}>
+                  <Text style={styles.ddSheetTitle}>Select Period</Text>
+                  <TouchableOpacity style={styles.ddCloseBtn} onPress={() => setOpen(false)}>
+                    <Text style={styles.ddCloseTxt}>✕</Text>
+                  </TouchableOpacity>
                 </View>
+                <FlatList
+                  data={PERIOD_OPTIONS}
+                  keyExtractor={item => item.key}
+                  keyboardShouldPersistTaps="handled"
+                  ItemSeparatorComponent={() => <View style={styles.ddSep} />}
+                  renderItem={({ item }) => {
+                    const isActive = item.key === selected;
+                    const isCustom = item.key === 'custom';
+                    return (
+                      <TouchableOpacity
+                        style={[styles.ddOptRow, isActive && styles.ddOptRowActive]}
+                        onPress={() => handleSelect(item.key)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={[styles.ddOptAccent, isActive && styles.ddOptAccentActive, isCustom && !isActive && styles.ddOptAccentCustom]} />
+                        <Text style={[styles.ddOptTxt, isActive && styles.ddOptTxtActive, isCustom && !isActive && styles.ddOptTxtCustom]}>
+                          {item.label}
+                        </Text>
+                        {isCustom && (
+                          <View style={styles.ddNewBadge}>
+                            <Text style={styles.ddNewBadgeTxt}>NEW</Text>
+                          </View>
+                        )}
+                        {isActive && <Text style={styles.ddCheck}>✓</Text>}
+                      </TouchableOpacity>
+                    );
+                  }}
+                />
               </View>
-            </View>
+            </TouchableWithoutFeedback>
           </View>
-          <View style={styles.propSummaryRight}>
-            <Text style={styles.propSummaryLabel}>TOTAL EXPENSES</Text>
-            <Text style={styles.propSummaryAmount}>{activeProp.totalExp}</Text>
-          </View>
-        </View>
-
-        {/* View Expenses Button */}
-        <TouchableOpacity
-          style={styles.viewExpBtn}
-          onPress={() => onViewExpenses(activeProp)}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.viewExpBtnText}>View {activeProp.label} Expenses</Text>
-          <Text style={styles.viewExpBtnArrow}>›</Text>
-        </TouchableOpacity>
-      </View>
-
-    </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+    </>
   );
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 7. MAIN SCREEN
+// 5. PROGRESS BAR
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ProgressBar = ({ progress }) => (
+  <View style={styles.progTrack}>
+    <View style={[styles.progFill, { width: `${Math.round((progress || 0) * 100)}%` }]} />
+  </View>
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 6. SKELETON
+// ─────────────────────────────────────────────────────────────────────────────
+
+const SkeletonBox = ({ w, h, radius = 6 }) => (
+  <View style={{ width: w, height: h, borderRadius: radius, backgroundColor: '#E2E8F0' }} />
+);
+
+const LoadingSkeleton = () => (
+  <View style={{ gap: 12 }}>
+    {[0, 1].map(i => (
+      <View key={i} style={[styles.expCard, { padding: 14, gap: 10 }]}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <SkeletonBox w={36} h={36} radius={10} />
+          <View style={{ gap: 6 }}>
+            <SkeletonBox w={120} h={14} />
+            <SkeletonBox w={80}  h={11} />
+          </View>
+          <View style={{ flex: 1 }} />
+          <SkeletonBox w={70} h={28} radius={8} />
+        </View>
+        <View style={styles.cardDivider} />
+        {[0, 1].map(j => (
+          <View key={j} style={styles.propRow}>
+            <SkeletonBox w={30} h={30} radius={8} />
+            <View style={{ flex: 1, gap: 5 }}>
+              <SkeletonBox w={90}  h={13} />
+              <SkeletonBox w={50}  h={10} />
+              <SkeletonBox w={'100%'} h={4} radius={4} />
+            </View>
+            <View style={{ alignItems: 'flex-end', gap: 5 }}>
+              <SkeletonBox w={60} h={14} />
+              <SkeletonBox w={70} h={10} />
+            </View>
+          </View>
+        ))}
+      </View>
+    ))}
+  </View>
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 7. PROPERTY ROW — same as Revenue screen
+// ─────────────────────────────────────────────────────────────────────────────
+
+const PropertyRow = ({ prop, onViewExpenses }) => (
+  <TouchableOpacity style={styles.propRow} activeOpacity={0.8} onPress={() => onViewExpenses(prop)}>
+    <View style={styles.propRowIcon}>
+      <Image source={prop.icon} style={styles.propRowIconImg} resizeMode="contain" />
+    </View>
+    <View style={styles.propRowMid}>
+      <Text style={styles.propRowName}>{prop.label}</Text>
+      <View style={styles.propBadge}>
+        <Text style={styles.propBadgeText}>{prop.badge}</Text>
+      </View>
+      <ProgressBar progress={prop.progress} />
+    </View>
+    <View style={styles.propRowRight}>
+      <Text style={styles.propRowAmt}>{prop.totalExp}</Text>
+      <View style={styles.dotRow}>
+        <View style={styles.dot} />
+        <Text style={styles.dotText}>{prop.count} expenses</Text>
+      </View>
+    </View>
+  </TouchableOpacity>
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 8. EXPENSE SECTION CARD — same structure as RevenueSectionCard
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ExpenseSectionCard = ({
+  title,
+  categoryIcon,
+  categoryIconBg,
+  categoryIconTint,
+  data,
+  onViewExpenses,
+}) => (
+  <View style={styles.expCard}>
+    <View style={styles.expCardHdr}>
+      <View style={[styles.expCardIconBox, { backgroundColor: categoryIconBg }]}>
+        <Image
+          source={categoryIcon}
+          style={[styles.expCardIcon, { tintColor: categoryIconTint }]}
+          resizeMode="contain"
+        />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.expCardTitle}>{title}</Text>
+        <Text style={styles.expCardSub}>
+          {data.properties.length} properties · {data.totalCount} expenses
+        </Text>
+      </View>
+      <View style={styles.totalBadge}>
+        <Text style={styles.totalBadgeText}>{data.totalAmount}</Text>
+      </View>
+    </View>
+    <View style={styles.cardDivider} />
+    <View style={styles.expCardBody}>
+      {data.properties.map(prop => (
+        <PropertyRow key={prop.key} prop={prop} onViewExpenses={onViewExpenses} />
+      ))}
+    </View>
+  </View>
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 9. MAIN SCREEN
 // ─────────────────────────────────────────────────────────────────────────────
 
 const TotalExpensesScreen = ({ navigation }) => {
   const [period,         setPeriod]         = useState('today');
+  const [search,         setSearch]         = useState('');
+  const [expensesData,   setExpensesData]   = useState([]);
+  const [loading,        setLoading]        = useState(false);
+  const [error,          setError]          = useState(null);
+
+  // Modal state
   const [farmhouseModal, setFarmhouseModal] = useState(false);
   const [selectedFarm,   setSelectedFarm]   = useState(null);
   const [airbnbModal,    setAirbnbModal]    = useState(false);
   const [selectedAirbnb, setSelectedAirbnb] = useState(null);
 
-  // ── API state ──────────────────────────────────────────────────────────────
-  const [expensesData, setExpensesData] = useState([]);
-  const [loading,      setLoading]      = useState(false);
+  // ── Fetch ──────────────────────────────────────────────────────────────────
 
-  const fetchExpenses = async () => {
+  const fetchExpenses = useCallback(async (periodKey) => {
     try {
       setLoading(true);
-      const result = await getExpenses();
+      setError(null);
+
+      const filterType = getFilterType(periodKey ?? period);
+      console.log('🚀 FETCHING EXPENSES filterType =>', filterType);
+
+      const result = await getExpenses(filterType, '', '');
+      console.log('✅ EXPENSES RESPONSE =>', JSON.stringify(result, null, 2));
+
       if (result.success) {
-        console.log('✅ FINAL EXPENSES =>', JSON.stringify(result.data, null, 2));
-        setExpensesData(result.data);
+        setExpensesData(result.data || []);
       } else {
-        Alert.alert('Error', result.message);
+        setError(result.message || 'Unable to load data. Please try again.');
       }
-    } catch (error) {
-      console.log('❌ FETCH EXPENSE ERROR =>', error);
-      Alert.alert('Error', 'Something went wrong while fetching expenses.');
+    } catch (err) {
+      console.log('❌ EXPENSE FETCH ERROR =>', err);
+      setError('Something went wrong. Please try again.');
     } finally {
       setLoading(false);
     }
+  }, [period]);
+
+  // Period change hone par refetch
+  useEffect(() => {
+    fetchExpenses(period);
+  }, [period]);
+
+  // Screen focus par refresh
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => fetchExpenses(period));
+    return unsubscribe;
+  }, [navigation, period]);
+
+  // ── Build category data ────────────────────────────────────────────────────
+
+  const buildCategoryData = (categoryName) => {
+    const filtered = expensesData.filter(
+      item => item.Category?.toLowerCase() === categoryName.toLowerCase()
+    );
+
+    // Search filter
+    const searched = !search.trim() ? filtered : filtered.filter(
+      item => item.PropertyName?.toLowerCase().includes(search.toLowerCase())
+    );
+
+    // Group by property
+    const propMap = {};
+    searched.forEach(item => {
+      const key = item.PropertyName || 'Unknown';
+      if (!propMap[key]) {
+        propMap[key] = {
+          key,
+          label:       key,
+          badge:       item.Category || categoryName,
+          totalAmount: 0,
+          count:       0,
+          expenses:    [],
+          ...getPropertyIconConfig(key),
+        };
+      }
+      propMap[key].totalAmount += Number(item.ExpenseAmount || 0);
+      propMap[key].count       += 1;
+      propMap[key].expenses.push(item);
+    });
+
+    const properties = Object.values(propMap);
+    const maxAmt     = Math.max(...properties.map(p => p.totalAmount), 1);
+
+    const propsWithProgress = properties.map(p => ({
+      ...p,
+      totalExp: formatINR(p.totalAmount),
+      progress: parseFloat((p.totalAmount / maxAmt).toFixed(2)),
+    }));
+
+    const total = properties.reduce((sum, p) => sum + p.totalAmount, 0);
+    const count = searched.length;
+
+    return {
+      totalAmount: formatINR(total),
+      totalCount:  count,
+      properties:  propsWithProgress,
+    };
   };
 
-useEffect(() => {
+  const farmData   = buildCategoryData('Farmhouse');
+  const airbnbData = buildCategoryData('Airbnb');
 
-  const unsubscribe = navigation.addListener(
-    'focus',
-    () => {
+  const showFarm   = farmData.properties.length   > 0;
+  const showAirbnb = airbnbData.properties.length > 0;
 
-      fetchExpenses();
-    }
-  );
-
-  return unsubscribe;
-
-}, [navigation]);
-
-  // ── Derived / computed data ────────────────────────────────────────────────
-
- const farmhouseData = expensesData.filter(
-  item =>
-    item.Category?.toLowerCase() === 'farmhouse'
-);
-
-const airbnbData = expensesData.filter(
-  item =>
-    item.Category?.toLowerCase() === 'airbnb'
-);
-
-  const farmhouseTotal = farmhouseData.reduce(
-    (sum, item) => sum + Number(item.ExpenseAmount || 0), 0,
-  );
-  const airbnbTotal = airbnbData.reduce(
-    (sum, item) => sum + Number(item.ExpenseAmount || 0), 0,
-  );
-  const overallTotal = farmhouseTotal + airbnbTotal;
-
-  // ── Build property arrays for PropertySectionCard ─────────────────────────
-
-  const uniqueFarmhouseMap = {};
-
-farmhouseData.forEach(item => {
-
-  if (!uniqueFarmhouseMap[item.PropertyName]) {
-
-    uniqueFarmhouseMap[item.PropertyName] = {
-      key: item.PropertyName,
-      label: item.PropertyName,
-      badge: item.Category,
-      totalAmount: 0,
-      expenses: [],
-      ...getPropertyIconConfig(item.PropertyName),
-    };
-  }
-
-  uniqueFarmhouseMap[item.PropertyName]
-    .totalAmount += Number(item.ExpenseAmount || 0);
-
-  uniqueFarmhouseMap[item.PropertyName]
-    .expenses.push(item);
-});
-
-const FARMHOUSE_PROPERTIES =
-  Object.values(uniqueFarmhouseMap).map(item => ({
-
-    ...item,
-
-    totalExp:
-      `₹${item.totalAmount.toLocaleString('en-IN')}`,
-}));
-
-  const uniqueAirbnbMap = {};
-
-airbnbData.forEach(item => {
-
-  if (!uniqueAirbnbMap[item.PropertyName]) {
-
-    uniqueAirbnbMap[item.PropertyName] = {
-      key: item.PropertyName,
-      label: item.PropertyName,
-      badge: item.Category,
-      totalAmount: 0,
-      expenses: [],
-      ...getPropertyIconConfig(item.PropertyName),
-    };
-  }
-
-  uniqueAirbnbMap[item.PropertyName]
-    .totalAmount += Number(item.ExpenseAmount || 0);
-
-  uniqueAirbnbMap[item.PropertyName]
-    .expenses.push(item);
-});
-
-const AIRBNB_PROPERTIES =
-  Object.values(uniqueAirbnbMap).map(item => ({
-
-    ...item,
-
-    totalExp:
-      `₹${item.totalAmount.toLocaleString('en-IN')}`,
-}));
-  // Format totals for display
-  const fmt = (n) => `₹${n.toLocaleString('en-IN')}`;
+  // Overall totals for header strip
+  const allFarmExp   = expensesData.filter(i => i.Category?.toLowerCase() === 'farmhouse');
+  const allAirbnbExp = expensesData.filter(i => i.Category?.toLowerCase() === 'airbnb');
+  const farmTotal    = allFarmExp.reduce((s, i)   => s + Number(i.ExpenseAmount || 0), 0);
+  const airbnbTotal  = allAirbnbExp.reduce((s, i) => s + Number(i.ExpenseAmount || 0), 0);
+  const overallTotal = farmTotal + airbnbTotal;
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
-  const handleFarmhouseView = (prop) => {
+  const handleFarmView = (prop) => {
     setSelectedFarm(prop);
     setFarmhouseModal(true);
   };
@@ -364,11 +420,11 @@ const AIRBNB_PROPERTIES =
     setAirbnbModal(true);
   };
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar backgroundColor="#0F172A" barStyle="light-content" />
+      <StatusBar backgroundColor={Colors.header_dark} barStyle="light-content" />
 
       {/* ── HEADER ─────────────────────────────────────────────────────────── */}
       <View style={styles.header}>
@@ -376,113 +432,137 @@ const AIRBNB_PROPERTIES =
         <View style={styles.circle2} />
 
         <View style={styles.headerTop}>
-          <TouchableOpacity
-            style={styles.backBtn}
-            onPress={() => navigation.goBack()}
-            activeOpacity={0.8}
-          >
-            <Image
-              source={require('../../Assets/icons/ak.png')}
-              style={styles.backIcon}
-              resizeMode="contain"
-            />
+          <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.8}>
+            <Image source={require('../../Assets/icons/ak.png')} style={styles.backIcon} resizeMode="contain" />
           </TouchableOpacity>
           <View style={styles.headerTitleBlock}>
             <Text style={styles.headerTitle}>Total Expenses</Text>
             <Text style={styles.headerSubtitle}>All properties overview</Text>
           </View>
+          <TouchableOpacity style={styles.refreshBtn} onPress={() => fetchExpenses(period)} activeOpacity={0.8} disabled={loading}>
+            {loading
+              ? <ActivityIndicator size="small" color={Colors.text_white} />
+              : <Text style={styles.refreshIcon}>↻</Text>
+            }
+          </TouchableOpacity>
         </View>
 
-        {/* Summary strip — live totals from API */}
+        {/* Summary strip */}
         <View style={styles.summaryStrip}>
           <View style={[styles.stripItem, styles.stripItemBorder]}>
             <Text style={styles.stripLabel}>TOTAL</Text>
-            <Text style={styles.stripVal}>{fmt(overallTotal)}</Text>
-            <Text style={styles.stripSub}>
-              {expensesData.length} properties
-            </Text>
+            <Text style={styles.stripVal}>{loading ? '...' : formatINR(overallTotal)}</Text>
+            <Text style={styles.stripSub}>{allFarmExp.length + allAirbnbExp.length} expenses</Text>
           </View>
           <View style={[styles.stripItem, styles.stripItemBorder]}>
             <Text style={styles.stripLabel}>FARMHOUSE</Text>
-            <Text style={styles.stripVal}>{fmt(farmhouseTotal)}</Text>
-            <Text style={styles.stripSub}>
-              {farmhouseData.length} properties
-            </Text>
+            <Text style={styles.stripVal}>{loading ? '...' : formatINR(farmTotal)}</Text>
+            <Text style={styles.stripSub}>{allFarmExp.length} expenses</Text>
           </View>
           <View style={styles.stripItem}>
             <Text style={styles.stripLabel}>AIRBNB</Text>
-            <Text style={styles.stripVal}>{fmt(airbnbTotal)}</Text>
-            <Text style={styles.stripSub}>
-              {airbnbData.length} properties
-            </Text>
+            <Text style={styles.stripVal}>{loading ? '...' : formatINR(airbnbTotal)}</Text>
+            <Text style={styles.stripSub}>{allAirbnbExp.length} expenses</Text>
           </View>
         </View>
       </View>
 
       {/* ── BODY ───────────────────────────────────────────────────────────── */}
-      {loading ? (
-        <View style={styles.loaderWrap}>
-          <ActivityIndicator size="large" color={Colors.primary} />
-          <Text style={styles.loaderText}>Loading expenses...</Text>
+      <ScrollView
+        style={styles.body}
+        contentContainerStyle={[styles.bodyContent, { paddingBottom: 70 }]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* Search + Period row */}
+        <View style={styles.filterRow}>
+          <View style={styles.searchWrap}>
+            <Text style={styles.searchIcon}>🔍</Text>
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search properties..."
+              placeholderTextColor={Colors.text_label}
+              value={search}
+              onChangeText={setSearch}
+              autoCorrect={false}
+              returnKeyType="search"
+            />
+            {search.length > 0 && (
+              <TouchableOpacity onPress={() => setSearch('')} style={styles.searchClear}>
+                <Text style={styles.searchClearTxt}>✕</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          <PeriodDropdown selected={period} onSelect={setPeriod} />
         </View>
-      ) : (
-        <ScrollView
-          style={styles.body}
-           contentContainerStyle={[styles.bodyContent, { paddingBottom: 70 }]}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Period Pills */}
-          <PeriodPills selected={period} onSelect={setPeriod} />
 
-          {/* Farmhouse Section */}
-          {FARMHOUSE_PROPERTIES.length > 0 && (
-            <PropertySectionCard
-              title="Farmhouse"
-              subtitle={`${FARMHOUSE_PROPERTIES.length} properties`}
-              categoryIcon={require('../../Assets/icons/stonestays1.png')}
-              totalAmount={fmt(farmhouseTotal)}
-              properties={FARMHOUSE_PROPERTIES}
-              onViewExpenses={handleFarmhouseView}
-            />
-          )}
+        {/* Loading */}
+        {loading && <LoadingSkeleton />}
 
-          {/* Airbnb Section */}
-          {AIRBNB_PROPERTIES.length > 0 && (
-            <PropertySectionCard
-              title="Airbnb"
-              subtitle={`${AIRBNB_PROPERTIES.length} properties`}
-              categoryIcon={require('../../Assets/icons/stonestays1.png')}
-              totalAmount={fmt(airbnbTotal)}
-              properties={AIRBNB_PROPERTIES}
-              onViewExpenses={handleAirbnbView}
-            />
-          )}
+        {/* Error */}
+        {!loading && error && (
+          <View style={styles.errorState}>
+            <Text style={styles.errorEmoji}>⚠️</Text>
+            <Text style={styles.errorTxt}>{error}</Text>
+            <TouchableOpacity style={styles.retryBtn} onPress={() => fetchExpenses(period)} activeOpacity={0.8}>
+              <Text style={styles.retryTxt}>Retry</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
-          {/* Empty state */}
-          {!loading && expensesData.length === 0 && (
-            <View style={styles.emptyWrap}>
-              <Text style={styles.emptyText}>No expenses found.</Text>
-            </View>
-          )}
-        </ScrollView>
-      )}
+        {/* Empty */}
+        {!loading && !error && !showFarm && !showAirbnb && (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyEmoji}>🔍</Text>
+            <Text style={styles.emptyTxt}>
+              {search ? `No properties found for "${search}"` : 'No expense data available.'}
+            </Text>
+          </View>
+        )}
 
-      {/* ── FARMHOUSE EXPENSES MODAL ────────────────────────────────────────── */}
+        {/* Farmhouse card */}
+        {!loading && !error && showFarm && (
+          <ExpenseSectionCard
+            title="Farmhouse"
+            categoryIcon={require('../../Assets/icons/Greystone.png')}
+            categoryIconBg="#CCFBF1"
+            categoryIconTint={Colors.primary_text}
+            data={farmData}
+            onViewExpenses={handleFarmView}
+          />
+        )}
+
+        {/* Airbnb card */}
+        {!loading && !error && showAirbnb && (
+          <ExpenseSectionCard
+            title="Airbnb"
+            categoryIcon={require('../../Assets/icons/stonestays1.png')}
+            categoryIconBg="#CFFAFE"
+            categoryIconTint={Colors.primary}
+            data={airbnbData}
+            onViewExpenses={handleAirbnbView}
+          />
+        )}
+
+        {/* View All Bookings button */}
+      
+
+      </ScrollView>
+
+      {/* ── MODALS ─────────────────────────────────────────────────────────── */}
       <FarmhouseExpenses
         visible={farmhouseModal}
         property={selectedFarm}
         period={period}
         onClose={() => setFarmhouseModal(false)}
-
       />
-
-      {/* ── AIRBNB EXPENSES MODAL ───────────────────────────────────────────── */}
       <AirbnbExpenses
         visible={airbnbModal}
         property={selectedAirbnb}
         period={period}
         onClose={() => setAirbnbModal(false)}
       />
+
     </SafeAreaView>
   );
 };
@@ -490,20 +570,16 @@ const AIRBNB_PROPERTIES =
 export default TotalExpensesScreen;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 8. STYLES
+// 10. STYLES
 // ─────────────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
 
-  safeArea: {
-    flex:            1,
-    backgroundColor: '#0F172A',
-  },
+  safeArea: { flex: 1, backgroundColor: Colors.header_dark },
 
   // ── Header ────────────────────────────────────────────────────────────────
-
   header: {
-    backgroundColor: '#0F172A',
+    backgroundColor: Colors.header_dark,
     paddingTop:      8,
     overflow:        'hidden',
     marginTop:       27,
@@ -524,11 +600,7 @@ const styles = StyleSheet.create({
     justifyContent:  'center',
     marginRight:     14,
   },
-  backIcon: {
-    width:     18,
-    height:    18,
-    tintColor: Colors.text_white,
-  },
+  backIcon:         { width: 18, height: 18, tintColor: Colors.text_white },
   headerTitleBlock: { flex: 1 },
   headerTitle: {
     color:        Colors.text_white,
@@ -536,129 +608,104 @@ const styles = StyleSheet.create({
     fontWeight:   '600',
     marginBottom: 3,
   },
-  headerSubtitle: {
-    color:    Colors.text_muted,
-    fontSize: F.f12,
+  headerSubtitle: { color: Colors.text_muted, fontSize: F.f12 },
+  refreshBtn: {
+    width:           36,
+    height:          36,
+    borderRadius:    10,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    alignItems:      'center',
+    justifyContent:  'center',
   },
+  refreshIcon: { fontSize: 20, color: Colors.text_white, fontWeight: '700' },
   circle1: {
-    position:        'absolute',
-    width:           130,
-    height:          130,
-    borderRadius:    65,
-    borderWidth:     22,
-    borderColor:     'rgba(255,255,255,0.07)',
-    top:             -35,
-    right:           -30,
-    zIndex:          1,
+    position: 'absolute', width: 130, height: 130, borderRadius: 65,
+    borderWidth: 22, borderColor: 'rgba(255,255,255,0.07)',
+    top: -35, right: -30, zIndex: 1,
   },
   circle2: {
-    position:        'absolute',
-    width:           70,
-    height:          70,
-    borderRadius:    35,
-    borderWidth:     14,
-    borderColor:     'rgba(255,255,255,0.05)',
-    bottom:          30,
-    right:           60,
-    zIndex:          1,
+    position: 'absolute', width: 70, height: 70, borderRadius: 35,
+    borderWidth: 14, borderColor: 'rgba(255,255,255,0.05)',
+    bottom: 30, right: 60, zIndex: 1,
   },
+
+  // ── Summary Strip ─────────────────────────────────────────────────────────
   summaryStrip: {
     flexDirection:   'row',
     backgroundColor: Colors.strip_bg,
     borderTopWidth:  0.5,
     borderTopColor:  Colors.border_white,
   },
-  stripItem: {
-    flex:    1,
-    padding: 11,
-  },
-  stripItemBorder: {
-    borderRightWidth:  0.5,
-    borderRightColor:  Colors.border_white,
-  },
+  stripItem:       { flex: 1, padding: 11 },
+  stripItemBorder: { borderRightWidth: 0.5, borderRightColor: Colors.border_white },
   stripLabel: {
-    fontSize:      F.f10,
-    color:         'rgba(255,255,255,0.50)',
-    letterSpacing: 0.4,
-    marginBottom:  3,
+    fontSize: F.f10, color: 'rgba(255,255,255,0.50)',
+    letterSpacing: 0.4, marginBottom: 3, marginLeft: 10,
   },
-  stripVal: {
-    fontSize:   F.f15,
-    fontWeight: '600',
-    color:      Colors.text_white,
-  },
-  stripSub: {
-    fontSize:  F.f10,
-    color:     'rgba(255,255,255,0.40)',
-    marginTop: 1,
-  },
+  stripVal: { fontSize: F.f15, fontWeight: '600', color: Colors.text_white, marginLeft: 10 },
+  stripSub: { fontSize: F.f10, color: 'rgba(255,255,255,0.40)', marginTop: 1, marginLeft: 10 },
 
   // ── Body ──────────────────────────────────────────────────────────────────
-
   body:        { flex: 1, backgroundColor: Colors.page_bg },
-  bodyContent: {
-    paddingHorizontal: 14,
-    paddingTop:        14,
-    paddingBottom:     34,
-    gap:               12,
-  },
+  bodyContent: { paddingHorizontal: 14, paddingTop: 14, paddingBottom: 34, gap: 12 },
 
-  // ── Loader ────────────────────────────────────────────────────────────────
+  // ── Filter Row ────────────────────────────────────────────────────────────
+  filterRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  searchWrap: {
+    flex: 1, flexDirection: 'row', alignItems: 'center',
+    backgroundColor: Colors.card_bg, borderRadius: 12,
+    borderWidth: 1, borderColor: Colors.border,
+    paddingHorizontal: 12, height: 46, gap: 8,
+    ...Platform.select({
+      ios:     { shadowColor: '#0F766E', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.07, shadowRadius: 4 },
+      android: { elevation: 1 },
+    }),
+  },
+  searchIcon:     { fontSize: 14 },
+  searchInput:    { flex: 1, fontSize: F.f13, color: Colors.text_dark, padding: 0 },
+  searchClear:    { width: 24, height: 24, borderRadius: 12, backgroundColor: Colors.input_bg, alignItems: 'center', justifyContent: 'center' },
+  searchClearTxt: { fontSize: F.f10, color: Colors.text_label },
 
-  loaderWrap: {
-    flex:           1,
-    alignItems:     'center',
-    justifyContent: 'center',
-    gap:            10,
+  // ── Period Chip ───────────────────────────────────────────────────────────
+  periodChip: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: Colors.header_dark, borderRadius: 12,
+    paddingHorizontal: 10, height: 46, gap: 5, minWidth: 80, justifyContent: 'center',
+    ...Platform.select({
+      ios:     { shadowColor: '#0F766E', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.20, shadowRadius: 4 },
+      android: { elevation: 3 },
+    }),
   },
-  loaderText: {
-    color:    Colors.text_grey,
-    fontSize: F.f13,
-  },
+  chipCalIcon: { width: 14, height: 14, borderWidth: 1.2, borderColor: 'rgba(255,255,255,0.6)', borderRadius: 2, overflow: 'hidden' },
+  chipCalBar:  { width: '100%', height: 4, backgroundColor: 'rgba(255,255,255,0.6)' },
+  chipCalDots: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', padding: 1, gap: 1, justifyContent: 'center', alignContent: 'center' },
+  chipCalDot:  { width: 2, height: 2, borderRadius: 1, backgroundColor: 'rgba(255,255,255,0.7)' },
+  chipLabel:   { fontSize: F.f12, fontWeight: '600', color: Colors.text_white, flexShrink: 1 },
+  chipArrow:   { fontSize: F.f10, color: 'rgba(255,255,255,0.8)' },
 
-  // ── Empty State ───────────────────────────────────────────────────────────
+  // ── Dropdown Sheet ────────────────────────────────────────────────────────
+  ddOverlay:     { flex: 1, backgroundColor: 'rgba(15,23,42,0.45)', justifyContent: 'flex-end' },
+  ddSheet:       { backgroundColor: Colors.card_bg, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingBottom: 40 },
+  ddHandle:      { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: Colors.border, marginTop: 12, marginBottom: 4 },
+  ddSheetHdr:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 0.5, borderBottomColor: Colors.border },
+  ddSheetTitle:  { fontSize: F.f16, fontWeight: '700', color: Colors.text_dark },
+  ddCloseBtn:    { width: 32, height: 32, borderRadius: 16, backgroundColor: Colors.input_bg, alignItems: 'center', justifyContent: 'center' },
+  ddCloseTxt:    { fontSize: F.f12, color: Colors.text_grey },
+  ddSep:         { height: 0.5, backgroundColor: Colors.border_light, marginHorizontal: 20 },
+  ddOptRow:      { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 17, gap: 14 },
+  ddOptRowActive: { backgroundColor: Colors.primary_light },
+  ddOptAccent:       { width: 4, height: 20, borderRadius: 2, backgroundColor: Colors.border },
+  ddOptAccentActive: { backgroundColor: Colors.primary },
+  ddOptAccentCustom: { backgroundColor: Colors.primary_mid },
+  ddOptTxt:          { flex: 1, fontSize: F.f15, color: Colors.text_dark },
+  ddOptTxtActive:    { fontWeight: '700', color: Colors.primary },
+  ddOptTxtCustom:    { color: Colors.primary_mid, fontWeight: '500' },
+  ddNewBadge:    { backgroundColor: Colors.primary, borderRadius: 5, paddingHorizontal: 7, paddingVertical: 2 },
+  ddNewBadgeTxt: { fontSize: F.f10, fontWeight: '700', color: Colors.text_white },
+  ddCheck:       { fontSize: F.f16, color: Colors.primary, fontWeight: '700' },
 
-  emptyWrap: {
-    alignItems:     'center',
-    justifyContent: 'center',
-    paddingVertical: 40,
-  },
-  emptyText: {
-    color:    Colors.text_grey,
-    fontSize: F.f14,
-  },
-
-  // ── Period Pills ──────────────────────────────────────────────────────────
-
-  pillRow: {
-    flexDirection: 'row',
-    flexWrap:      'wrap',
-    gap:           6,
-  },
-  pill: {
-    paddingHorizontal: 13,
-    paddingVertical:   7,
-    borderRadius:      20,
-    borderWidth:       1,
-    borderColor:       Colors.border,
-    backgroundColor:   Colors.card_bg,
-  },
-  pillActive: {
-    backgroundColor: Colors.primary,
-    borderColor:     Colors.primary,
-  },
-  pillText: {
-    fontSize:   F.f12,
-    fontWeight: '500',
-    color:      Colors.primary_mid,
-  },
-  pillTextActive: {
-    color: Colors.text_white,
-  },
-
-  // ── Section Card ──────────────────────────────────────────────────────────
-
-  sectionCard: {
+  // ── Expense Card ──────────────────────────────────────────────────────────
+  expCard: {
     backgroundColor: Colors.card_bg,
     borderRadius:    16,
     borderWidth:     0.5,
@@ -669,174 +716,65 @@ const styles = StyleSheet.create({
       android: { elevation: 2 },
     }),
   },
-  sectionCardHdr: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    gap:               10,
-    paddingHorizontal: 14,
-    paddingVertical:   13,
-    backgroundColor:   Colors.card_header_bg,
+  expCardHdr: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingHorizontal: 14, paddingVertical: 13,
+    backgroundColor: Colors.card_header_bg,
   },
-  sectionCardIconBox: {
-    width:          36,
-    height:         36,
-    borderRadius:   8,
-    alignItems:     'center',
-    justifyContent: 'center',
-  },
-  sectionCardIcon: {
-    width:  30,
-    height: 30,
-  },
-  sectionCardTitle: {
-    color:      Colors.text_dark,
-    fontSize:   F.f14,
-    fontWeight: '600',
-  },
-  sectionCardSub: {
-    color:     Colors.text_grey,
-    fontSize:  F.f11,
-    marginTop: 1,
-  },
-  sectionCardDivider: {
-    height:          0.5,
-    backgroundColor: Colors.border,
-  },
-  sectionCardBody: {
-    padding: 14,
-    gap:     10,
-  },
+  expCardIconBox: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#b8b8b8' },
+  expCardIcon:    { width: 30, height: 30 },
+  expCardTitle:   { color: Colors.text_dark, fontSize: F.f14, fontWeight: '600' },
+  expCardSub:     { color: Colors.text_grey, fontSize: F.f11, marginTop: 1 },
+  expCardBody:    { padding: 14, gap: 10 },
+  cardDivider:    { height: 0.5, backgroundColor: Colors.border },
+
   totalBadge: {
-    backgroundColor:   Colors.primary_light,
-    borderRadius:      8,
-    paddingHorizontal: 10,
-    paddingVertical:   4,
-    borderWidth:       0.5,
-    borderColor:       Colors.primary_border,
+    backgroundColor: Colors.primary_light, borderRadius: 8,
+    paddingHorizontal: 10, paddingVertical: 4,
+    borderWidth: 0.5, borderColor: Colors.primary_border,
   },
-  totalBadgeText: {
-    color:      Colors.primary,
-    fontSize:   F.f13,
-    fontWeight: '600',
-  },
+  totalBadgeText: { color: Colors.primary, fontSize: F.f13, fontWeight: '600' },
 
-  // ── Tab Switch ────────────────────────────────────────────────────────────
-
-  tabsWrap: {
-    flexDirection:     'row',
-    borderBottomWidth: 0.5,
-    borderBottomColor: Colors.border_light,
-    marginHorizontal:  -14,
-    paddingHorizontal: 14,
-    marginTop:         -4,
+  // ── Property Row ──────────────────────────────────────────────────────────
+  propRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: Colors.input_bg, borderRadius: 10,
+    padding: 10, paddingHorizontal: 12,
+    borderWidth: 0.5, borderColor: Colors.border,
   },
-  tab: {
-    flex:              1,
-    flexDirection:     'row',
-    alignItems:        'center',
-    justifyContent:    'center',
-    gap:               5,
-    paddingVertical:   9,
-    paddingBottom:     11,
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
-  },
-  tabActive: {
-    borderBottomColor: Colors.primary,
-  },
-  tabLabel: {
-    fontSize:   F.f12,
-    fontWeight: '500',
-    color:      Colors.text_label,
-  },
-  tabLabelActive: {
-    color: Colors.primary,
-  },
-
-  // ── Property Summary ──────────────────────────────────────────────────────
-
-  propSummary: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    justifyContent:    'space-between',
-    backgroundColor:   Colors.input_bg,
-    borderRadius:      10,
-    paddingHorizontal: 12,
-    paddingVertical:   11,
-    borderWidth:       0.5,
-    borderColor:       Colors.border,
-    marginTop:         4,
-  },
-  propSummaryLeft: {
-    flexDirection: 'row',
-    alignItems:    'center',
-    gap:           10,
-  },
-  propSummaryIconBox: {
-    width:          32,
-    height:         32,
-    borderRadius:   8,
-    alignItems:     'center',
-    justifyContent: 'center',
-  },
-  propSummaryIcon: {
-    width:  30,
-    height: 30,
-  },
-  propSummaryName: {
-    color:      Colors.text_dark,
-    fontSize:   F.f13,
-    fontWeight: '600',
-  },
-  propBadgeWrap: { marginTop: 3 },
+  propRowIcon:    { width: 30, height: 30, borderRadius: 8, alignItems: 'center', justifyContent: 'center', flexShrink: 0, borderWidth: 1, borderColor: '#b8b8b8' },
+  propRowIconImg: { width: 30, height: 30 },
+  propRowMid:     { flex: 1, gap: 3 },
+  propRowName:    { fontSize: F.f13, fontWeight: '500', color: Colors.text_dark },
   propBadge: {
-    backgroundColor:   Colors.primary_light,
-    borderRadius:      5,
-    paddingHorizontal: 7,
-    paddingVertical:   2,
-    borderWidth:       0.5,
-    borderColor:       Colors.primary_border,
-    alignSelf:         'flex-start',
+    alignSelf: 'flex-start', backgroundColor: Colors.primary_light,
+    borderRadius: 4, paddingHorizontal: 6, paddingVertical: 1,
+    borderWidth: 0.5, borderColor: Colors.primary_border,
   },
-  propBadgeText: {
-    color:         Colors.primary,
-    fontSize:      F.f10,
-    fontWeight:    '600',
-    letterSpacing: 0.3,
-  },
-  propSummaryRight: { alignItems: 'flex-end' },
-  propSummaryLabel: {
-    color:         Colors.text_grey,
-    fontSize:      F.f10,
-    fontWeight:    '500',
-    letterSpacing: 0.4,
-  },
-  propSummaryAmount: {
-    color:      Colors.text_dark,
-    fontSize:   F.f17,
-    fontWeight: '700',
-    marginTop:  2,
-  },
+  propBadgeText: { fontSize: F.f10, fontWeight: '600', color: Colors.primary },
+  progTrack:     { height: 4, backgroundColor: Colors.border_light, borderRadius: 4, overflow: 'hidden', marginTop: 4 },
+  progFill:      { height: 4, backgroundColor: Colors.header_dark, borderRadius: 4 },
+  propRowRight:  { alignItems: 'flex-end', gap: 3 },
+  propRowAmt:    { fontSize: F.f14, fontWeight: '600', color: Colors.text_dark },
+  dotRow:        { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  dot:           { width: 6, height: 6, borderRadius: 3, backgroundColor: Colors.header_dark },
+  dotText:       { fontSize: F.f10, color: Colors.header_dark },
 
-  // ── View Expenses Button ──────────────────────────────────────────────────
+  // ── Bottom Button ─────────────────────────────────────────────────────────
+  viewBtn: {
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: Colors.header_dark,
+    borderRadius: 10, paddingHorizontal: 14, paddingVertical: 14,
+  },
+  viewBtnText: { color: Colors.text_white, fontSize: F.f14, fontWeight: '600', textAlign: 'center' },
 
-  viewExpBtn: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    justifyContent:    'space-between',
-    backgroundColor:   '#0F172A',
-    borderRadius:      10,
-    paddingHorizontal: 14,
-    paddingVertical:   11,
-  },
-  viewExpBtnText: {
-    color:      Colors.text_white,
-    fontSize:   F.f13,
-    fontWeight: '600',
-  },
-  viewExpBtnArrow: {
-    color:      Colors.text_white,
-    fontSize:   F.f20,
-    fontWeight: '700',
-  },
+  // ── States ────────────────────────────────────────────────────────────────
+  errorState:  { alignItems: 'center', paddingVertical: 40, gap: 10 },
+  errorEmoji:  { fontSize: 34 },
+  errorTxt:    { fontSize: F.f13, color: Colors.text_label, textAlign: 'center' },
+  retryBtn:    { backgroundColor: Colors.primary, borderRadius: 8, paddingHorizontal: 20, paddingVertical: 10, marginTop: 4 },
+  retryTxt:    { color: Colors.text_white, fontSize: F.f13, fontWeight: '600' },
+  emptyState:  { alignItems: 'center', paddingVertical: 40 },
+  emptyEmoji:  { fontSize: 34, marginBottom: 10 },
+  emptyTxt:    { fontSize: F.f13, color: Colors.text_label },
 });

@@ -19,7 +19,7 @@ export const ENDPOINTS = {BASE_URL,
 
   UPDATE_BOOKING:     `${BASE_URL}/NewBooking/Update_NewBooking`,
     
-  DELETE_BOOKING:     `${BASE_URL}/NewBooking/Delet_NewBooking`,
+  DELETE_BOOKING: `${BASE_URL}/NewBooking/Delete_NewBooking`,  // ✅
 
   // subscription record (revenue screen) APIs
 
@@ -43,5 +43,10 @@ DELETE_ENQUIRY:      `${BASE_URL}/Enquiry/Delet_Enquiry`,
   UPDATE_EXPENSE: `${BASE_URL}/Expense/Update_Expense`,
 
   GET_EXPENSES: `${BASE_URL}/Expense/GetDataExpense`,
+
+  // USER ID APIs
+
+  UPLOAD_GUEST_IDS: `${BASE_URL}/File/SaveBookingID`,
   
 };
+

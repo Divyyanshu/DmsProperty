@@ -76,40 +76,36 @@ const formatINR = (num) => {
 const parseINR = (str) =>
   Number(String(str || '').replace('₹', '').replace(/,/g, '')) || 0;
 
-// ✅ FIX 1: Robust parser — handles all shapes API might return
-// Tries: response.data.data (string/array) → response.data (array) → response.data (object as [obj])
+// Format date object to DD/MM/YYYY for display
+const formatDisplayDate = (date) => {
+  if (!date) return '';
+  const d = String(date.getDate()).padStart(2, '0');
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const y = date.getFullYear();
+  return `${d}/${m}/${y}`;
+};
+
+// Format date object to YYYY-MM-DD for API
+const formatApiDate = (date) => {
+  if (!date) return '';
+  const d = String(date.getDate()).padStart(2, '0');
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const y = date.getFullYear();
+  return `${y}-${m}-${d}`;
+};
+
 const robustParse = (responseData) => {
   if (!responseData) return [];
-
-  // Case 1: { data: "[{...}]" }  — string-wrapped JSON
   if (responseData.data && typeof responseData.data === 'string') {
     try { return JSON.parse(responseData.data); } catch { /* fall through */ }
   }
-
-  // Case 2: { data: [{...}] }  — already an array inside .data
-  if (responseData.data && Array.isArray(responseData.data)) {
-    return responseData.data;
-  }
-
-  // Case 3: { data: {...} }  — single object inside .data
-  if (responseData.data && typeof responseData.data === 'object') {
-    return [responseData.data];
-  }
-
-  // Case 4: [{...}]  — top-level array
-  if (Array.isArray(responseData)) {
-    return responseData;
-  }
-
-  // Case 5: {...}  — top-level object (most likely case from this API)
-  if (typeof responseData === 'object') {
-    return [responseData];
-  }
-
+  if (responseData.data && Array.isArray(responseData.data)) return responseData.data;
+  if (responseData.data && typeof responseData.data === 'object') return [responseData.data];
+  if (Array.isArray(responseData)) return responseData;
+  if (typeof responseData === 'object') return [responseData];
   return [];
 };
 
-// ✅ FIX 2: Safe number getter — tries multiple field name variants
 const safeNum = (obj, ...keys) => {
   for (const key of keys) {
     const val = obj[key];
@@ -122,15 +118,415 @@ const safeNum = (obj, ...keys) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 4. PERIOD DROPDOWN
+// 4. MINI CALENDAR COMPONENT
 // ─────────────────────────────────────────────────────────────────────────────
 
-const PeriodDropdown = ({ selected, onSelect }) => {
-  const [open, setOpen] = useState(false);
+const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+const MONTHS = [
+  'January','February','March','April','May','June',
+  'July','August','September','October','November','December'
+];
+
+const MiniCalendar = ({ selectedDate, onSelect, minDate, maxDate }) => {
+  const today = new Date();
+  const initial = selectedDate || today;
+  const [viewYear,  setViewYear]  = useState(initial.getFullYear());
+  const [viewMonth, setViewMonth] = useState(initial.getMonth());
+
+  const firstDay = new Date(viewYear, viewMonth, 1).getDay();
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+
+  const prevMonth = () => {
+    if (viewMonth === 0) { setViewMonth(11); setViewYear(y => y - 1); }
+    else setViewMonth(m => m - 1);
+  };
+  const nextMonth = () => {
+    if (viewMonth === 11) { setViewMonth(0); setViewYear(y => y + 1); }
+    else setViewMonth(m => m + 1);
+  };
+
+  const isSelected = (day) => {
+    if (!selectedDate) return false;
+    return (
+      selectedDate.getDate() === day &&
+      selectedDate.getMonth() === viewMonth &&
+      selectedDate.getFullYear() === viewYear
+    );
+  };
+
+  const isDisabled = (day) => {
+    const d = new Date(viewYear, viewMonth, day);
+    if (minDate && d < minDate) return true;
+    if (maxDate && d > maxDate) return true;
+    return false;
+  };
+
+  const cells = [];
+  for (let i = 0; i < firstDay; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+  return (
+    <View>
+      {/* Month nav */}
+      <View style={cal.navRow}>
+        <TouchableOpacity style={cal.navBtn} onPress={prevMonth}>
+          <Text style={cal.navArrow}>‹</Text>
+        </TouchableOpacity>
+        <Text style={cal.monthLabel}>{MONTHS[viewMonth]} {viewYear}</Text>
+        <TouchableOpacity style={cal.navBtn} onPress={nextMonth}>
+          <Text style={cal.navArrow}>›</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Day headers */}
+      <View style={cal.weekRow}>
+        {DAYS.map(d => (
+          <Text key={d} style={cal.dayHeader}>{d}</Text>
+        ))}
+      </View>
+
+      {/* Day cells */}
+      <View style={cal.daysGrid}>
+        {cells.map((day, idx) => {
+          if (!day) return <View key={`e-${idx}`} style={cal.dayCell} />;
+          const sel  = isSelected(day);
+          const dis  = isDisabled(day);
+          const isToday =
+            day === today.getDate() &&
+            viewMonth === today.getMonth() &&
+            viewYear  === today.getFullYear();
+          return (
+            <TouchableOpacity
+              key={day}
+              style={[
+                cal.dayCell,
+                sel && cal.dayCellSelected,
+                isToday && !sel && cal.dayCellToday,
+              ]}
+              onPress={() => {
+                if (!dis) onSelect(new Date(viewYear, viewMonth, day));
+              }}
+              disabled={dis}
+              activeOpacity={0.7}
+            >
+              <Text style={[
+                cal.dayText,
+                sel && cal.dayTextSelected,
+                dis && cal.dayTextDis,
+                isToday && !sel && cal.dayTextToday,
+              ]}>
+                {day}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
+  );
+};
+
+const cal = StyleSheet.create({
+  navRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  navBtn: {
+    width: 32, height: 32, borderRadius: 8,
+    backgroundColor: Colors.input_bg,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  navArrow: { fontSize: 20, color: Colors.primary, fontWeight: '700', lineHeight: 24 },
+  monthLabel: { fontSize: F.f14, fontWeight: '600', color: Colors.text_dark },
+  weekRow: { flexDirection: 'row', marginBottom: 4 },
+  dayHeader: {
+    width: `${100/7}%`,
+    textAlign: 'center',
+    fontSize: F.f11,
+    fontWeight: '600',
+    color: Colors.text_grey,
+    paddingVertical: 4,
+  },
+  daysGrid: { flexDirection: 'row', flexWrap: 'wrap' },
+  dayCell: {
+    width: `${100/7}%`,
+    aspectRatio: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+  },
+  dayCellSelected: { backgroundColor: Colors.header_dark },
+  dayCellToday: {
+    borderWidth: 1.5,
+    borderColor: Colors.primary,
+  },
+  dayText: { fontSize: F.f13, color: Colors.text_dark },
+  dayTextSelected: { color: Colors.text_white, fontWeight: '700' },
+  dayTextDis: { color: Colors.border },
+  dayTextToday: { color: Colors.primary, fontWeight: '600' },
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 5. CUSTOM RANGE PICKER MODAL
+// ─────────────────────────────────────────────────────────────────────────────
+
+const CustomRangePicker = ({ visible, fromDate, toDate, onApply, onClose }) => {
+  const [step,    setStep]    = useState('from'); // 'from' | 'to'
+  const [selFrom, setSelFrom] = useState(fromDate || null);
+  const [selTo,   setSelTo]   = useState(toDate   || null);
+
+  // Reset when modal opens
+  useEffect(() => {
+    if (visible) {
+      setStep('from');
+      setSelFrom(fromDate || null);
+      setSelTo(toDate || null);
+    }
+  }, [visible]);
+
+  const handleFromSelect = (date) => {
+    setSelFrom(date);
+    // Clear toDate if it's before new fromDate
+    if (selTo && date > selTo) setSelTo(null);
+    setStep('to');
+  };
+
+  const handleToSelect = (date) => {
+    setSelTo(date);
+  };
+
+  const canApply = selFrom && selTo;
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <TouchableWithoutFeedback onPress={onClose}>
+        <View style={crp.overlay}>
+          <TouchableWithoutFeedback>
+            <View style={crp.sheet}>
+              {/* Handle */}
+              <View style={crp.handle} />
+
+              {/* Header */}
+              <View style={crp.header}>
+                <View>
+                  <Text style={crp.title}>Custom Range</Text>
+                  <Text style={crp.subtitle}>Select start and end date</Text>
+                </View>
+                <TouchableOpacity style={crp.closeBtn} onPress={onClose}>
+                  <Text style={crp.closeTxt}>✕</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Step tabs */}
+              <View style={crp.tabRow}>
+                <TouchableOpacity
+                  style={[crp.tab, step === 'from' && crp.tabActive]}
+                  onPress={() => setStep('from')}
+                >
+                  <Text style={crp.tabLabel}>FROM</Text>
+                  <Text style={[crp.tabDate, !selFrom && crp.tabDateEmpty]}>
+                    {selFrom ? formatDisplayDate(selFrom) : 'Select date'}
+                  </Text>
+                </TouchableOpacity>
+
+                <View style={crp.tabArrow}>
+                  <Text style={crp.tabArrowTxt}>→</Text>
+                </View>
+
+                <TouchableOpacity
+                  style={[crp.tab, step === 'to' && crp.tabActive]}
+                  onPress={() => { if (selFrom) setStep('to'); }}
+                >
+                  <Text style={crp.tabLabel}>TO</Text>
+                  <Text style={[crp.tabDate, !selTo && crp.tabDateEmpty]}>
+                    {selTo ? formatDisplayDate(selTo) : 'Select date'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={crp.divider} />
+
+              {/* Calendar */}
+              <View style={crp.calendarWrap}>
+                <Text style={crp.calHint}>
+                  {step === 'from'
+                    ? '📅  Select start date'
+                    : '📅  Select end date'}
+                </Text>
+                {step === 'from' && (
+                  <MiniCalendar
+                    selectedDate={selFrom}
+                    onSelect={handleFromSelect}
+                    maxDate={new Date()}
+                  />
+                )}
+                {step === 'to' && (
+                  <MiniCalendar
+                    selectedDate={selTo}
+                    onSelect={handleToSelect}
+                    minDate={selFrom}
+                    maxDate={new Date()}
+                  />
+                )}
+              </View>
+
+              <View style={crp.divider} />
+
+              {/* Actions */}
+              <View style={crp.actionRow}>
+                <TouchableOpacity style={crp.cancelBtn} onPress={onClose}>
+                  <Text style={crp.cancelTxt}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[crp.applyBtn, !canApply && crp.applyBtnDis]}
+                  onPress={() => {
+                    if (canApply) onApply(selFrom, selTo);
+                  }}
+                  disabled={!canApply}
+                >
+                  <Text style={crp.applyTxt}>Apply Range</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </TouchableWithoutFeedback>
+        </View>
+      </TouchableWithoutFeedback>
+    </Modal>
+  );
+};
+
+const crp = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15,23,42,0.50)',
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    backgroundColor: Colors.card_bg,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingBottom: 40,
+  },
+  handle: {
+    alignSelf: 'center',
+    width: 40, height: 4,
+    borderRadius: 2,
+    backgroundColor: Colors.border,
+    marginTop: 12, marginBottom: 4,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderBottomWidth: 0.5,
+    borderBottomColor: Colors.border,
+  },
+  title:    { fontSize: F.f16, fontWeight: '700', color: Colors.text_dark },
+  subtitle: { fontSize: F.f12, color: Colors.text_grey, marginTop: 2 },
+  closeBtn: {
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: Colors.input_bg,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  closeTxt: { fontSize: F.f12, color: Colors.text_grey },
+
+  tabRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  tab: {
+    flex: 1,
+    backgroundColor: Colors.input_bg,
+    borderRadius: 10,
+    padding: 10,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+  },
+  tabActive: {
+    borderColor: Colors.primary,
+    backgroundColor: Colors.primary_light,
+  },
+  tabLabel: {
+    fontSize: F.f10,
+    fontWeight: '700',
+    color: Colors.text_grey,
+    letterSpacing: 0.6,
+    marginBottom: 2,
+  },
+  tabDate:      { fontSize: F.f14, fontWeight: '600', color: Colors.text_dark },
+  tabDateEmpty: { fontSize: F.f13, fontWeight: '400', color: Colors.text_label },
+  tabArrow:     { alignItems: 'center', justifyContent: 'center', width: 24 },
+  tabArrowTxt:  { fontSize: F.f16, color: Colors.text_grey },
+
+  divider: { height: 0.5, backgroundColor: Colors.border },
+
+  calendarWrap: { paddingHorizontal: 16, paddingVertical: 14 },
+  calHint: {
+    fontSize: F.f12,
+    color: Colors.text_grey,
+    marginBottom: 10,
+    fontWeight: '500',
+  },
+
+  actionRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    gap: 10,
+  },
+  cancelBtn: {
+    flex: 1,
+    height: 46,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelTxt: { fontSize: F.f14, fontWeight: '600', color: Colors.text_grey },
+  applyBtn: {
+    flex: 2,
+    height: 46,
+    borderRadius: 10,
+    backgroundColor: Colors.header_dark,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  applyBtnDis: { backgroundColor: Colors.border },
+  applyTxt:    { fontSize: F.f14, fontWeight: '600', color: Colors.text_white },
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 6. PERIOD DROPDOWN (updated — custom range triggers date picker)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const PeriodDropdown = ({
+  selected,
+  onSelect,
+  customFrom,
+  customTo,
+  onCustomApply,
+}) => {
+  const [open,       setOpen]       = useState(false);
+  const [customOpen, setCustomOpen] = useState(false);
 
   const selectedLabel = PERIOD_OPTIONS.find(o => o.key === selected)?.label ?? 'Today';
 
-  const shortLabel = (lbl) => {
+  const shortLabel = (key, lbl) => {
+    if (key === 'custom' && customFrom && customTo) {
+      return `${formatDisplayDate(customFrom)} – ${formatDisplayDate(customTo)}`;
+    }
     if (lbl === 'Today')         return 'Today';
     if (lbl === 'Last Month')    return '1 Mo';
     if (lbl === 'Last 3 Months') return '3 Mo';
@@ -142,13 +538,25 @@ const PeriodDropdown = ({ selected, onSelect }) => {
   const handleSelect = (key) => {
     setOpen(false);
     Keyboard.dismiss();
-    onSelect(key);
+    if (key === 'custom') {
+      setCustomOpen(true);
+    } else {
+      onSelect(key, null, null);
+    }
+  };
+
+  const handleCustomApply = (from, to) => {
+    setCustomOpen(false);
+    onCustomApply(from, to);
   };
 
   return (
     <>
       <TouchableOpacity
-        style={styles.periodChip}
+        style={[
+          styles.periodChip,
+          selected === 'custom' && customFrom && customTo && styles.periodChipCustom,
+        ]}
         onPress={() => setOpen(true)}
         activeOpacity={0.8}
       >
@@ -159,11 +567,12 @@ const PeriodDropdown = ({ selected, onSelect }) => {
           </View>
         </View>
         <Text style={styles.chipLabel} numberOfLines={1}>
-          {shortLabel(selectedLabel)}
+          {shortLabel(selected, selectedLabel)}
         </Text>
         <Text style={styles.chipArrow}>▾</Text>
       </TouchableOpacity>
 
+      {/* Period options modal */}
       <Modal
         visible={open}
         transparent
@@ -200,19 +609,29 @@ const PeriodDropdown = ({ selected, onSelect }) => {
                           isActive && styles.ddOptAccentActive,
                           isCustom && !isActive && styles.ddOptAccentCustom,
                         ]} />
-                        <Text style={[
-                          styles.ddOptTxt,
-                          isActive && styles.ddOptTxtActive,
-                          isCustom && !isActive && styles.ddOptTxtCustom,
-                        ]}>
-                          {item.label}
-                        </Text>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[
+                            styles.ddOptTxt,
+                            isActive && styles.ddOptTxtActive,
+                            isCustom && !isActive && styles.ddOptTxtCustom,
+                          ]}>
+                            {item.label}
+                          </Text>
+                          {/* Show selected dates under Custom option */}
+                          {isCustom && isActive && customFrom && customTo && (
+                            <Text style={ddCust.subTxt}>
+                              {formatDisplayDate(customFrom)} → {formatDisplayDate(customTo)}
+                            </Text>
+                          )}
+                        </View>
                         {isCustom && (
                           <View style={styles.ddNewBadge}>
-                            <Text style={styles.ddNewBadgeTxt}>NEW</Text>
+                            <Text style={styles.ddNewBadgeTxt}>
+                              {isActive && customFrom ? 'EDIT' : 'PICK'}
+                            </Text>
                           </View>
                         )}
-                        {isActive && <Text style={styles.ddCheck}>✓</Text>}
+                        {isActive && !isCustom && <Text style={styles.ddCheck}>✓</Text>}
                       </TouchableOpacity>
                     );
                   }}
@@ -222,12 +641,30 @@ const PeriodDropdown = ({ selected, onSelect }) => {
           </View>
         </TouchableWithoutFeedback>
       </Modal>
+
+      {/* Custom date range picker */}
+      <CustomRangePicker
+        visible={customOpen}
+        fromDate={customFrom}
+        toDate={customTo}
+        onApply={handleCustomApply}
+        onClose={() => setCustomOpen(false)}
+      />
     </>
   );
 };
 
+const ddCust = StyleSheet.create({
+  subTxt: {
+    fontSize: F.f11,
+    color: Colors.primary,
+    marginTop: 2,
+    fontWeight: '500',
+  },
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
-// 5. PROGRESS BAR
+// 7. PROGRESS BAR
 // ─────────────────────────────────────────────────────────────────────────────
 
 const ProgressBar = ({ progress }) => (
@@ -237,7 +674,7 @@ const ProgressBar = ({ progress }) => (
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 6. PROPERTY ROW
+// 8. PROPERTY ROW
 // ─────────────────────────────────────────────────────────────────────────────
 
 const PropertyRow = ({ prop }) => (
@@ -263,7 +700,7 @@ const PropertyRow = ({ prop }) => (
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 7. REVENUE SECTION CARD
+// 9. REVENUE SECTION CARD
 // ─────────────────────────────────────────────────────────────────────────────
 
 const RevenueSectionCard = ({
@@ -304,7 +741,7 @@ const RevenueSectionCard = ({
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 8. LOADING SKELETON
+// 10. LOADING SKELETON
 // ─────────────────────────────────────────────────────────────────────────────
 
 const SkeletonBox = ({ w, h, radius = 6 }) => (
@@ -345,11 +782,13 @@ const LoadingSkeleton = () => (
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 9. MAIN SCREEN
+// 11. MAIN SCREEN
 // ─────────────────────────────────────────────────────────────────────────────
 
 const TotalRevnueScreen = ({ navigation }) => {
   const [period,        setPeriod]        = useState('today');
+  const [customFrom,    setCustomFrom]    = useState(null);
+  const [customTo,      setCustomTo]      = useState(null);
   const [search,        setSearch]        = useState('');
   const [farmhouseData, setFarmhouseData] = useState(null);
   const [airbnbData,    setAirbnbData]    = useState(null);
@@ -357,43 +796,43 @@ const TotalRevnueScreen = ({ navigation }) => {
   const [error,         setError]         = useState(null);
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
-  // ✅ FIX 3: period ko filterType mein convert karke API ko pass karo
   const fetchRevenueData = useCallback(async () => {
+    // For custom, require both dates
+    if (period === 'custom' && (!customFrom || !customTo)) return;
+
     try {
       setLoading(true);
       setError(null);
 
-      const filterType = getFilterType(period); // 'Today' / 'Month1' etc.
+      const filterType = getFilterType(period);
+      const fromDate   = period === 'custom' ? formatApiDate(customFrom) : '';
+      const toDate     = period === 'custom' ? formatApiDate(customTo)   : '';
 
-      console.log('🚀 FETCHING REVENUE with filterType =>', filterType);
+      console.log('🚀 FETCHING REVENUE =>', { filterType, fromDate, toDate });
 
-      const revenueDetails = await getRevenueDetails(filterType, '', '');
+      // ✅ FIX: filterType properly passed — not hardcoded 'Today'
+      const revenueDetails = await getRevenueDetails(filterType, fromDate, toDate);
 
       console.log('🔥 RAW REVENUE RESPONSE =>', JSON.stringify(revenueDetails, null, 2));
 
       if (revenueDetails.success) {
-        // ✅ FIX 1 applied: robustParse handles all response shapes
-        const parsed = robustParse(revenueDetails.data);
+        const parsed  = robustParse(revenueDetails.data);
         const details = parsed[0] ?? {};
 
-        console.log('🔑 ALL KEYS IN DETAILS =>', Object.keys(details));
-        console.log('📊 DETAILS VALUES =>', JSON.stringify(details, null, 2));
+        console.log('🔑 ALL KEYS =>', Object.keys(details));
 
         // ── Farmhouse ──────────────────────────────────────────────────────
-        // ✅ FIX 2: safeNum tries multiple field name variants
         const greyRev = safeNum(details,
-          'TotalAmountGreyStone', 'TotalAmountGreystone', 'totalAmountGreyStone',
-          'GreyStoneAmount', 'GreystoneAmount', 'GreyStone'
+          'TotalAmountGreyStone','TotalAmountGreystone','totalAmountGreyStone',
+          'GreyStoneAmount','GreystoneAmount','GreyStone'
         );
         const skyRev = safeNum(details,
-          'TotalAmountSkyStone', 'TotalAmountSkystone', 'totalAmountSkyStone',
-          'SkyStoneAmount', 'SkystoneAmount', 'SkyStone'
+          'TotalAmountSkyStone','TotalAmountSkystone','totalAmountSkyStone',
+          'SkyStoneAmount','SkystoneAmount','SkyStone'
         );
-        const farmMax = Math.max(greyRev, skyRev, 1);
-
+        const farmMax          = Math.max(greyRev, skyRev, 1);
         const farmBookingsTotal = safeNum(details,
-          'TotalBookingFramHouse', 'TotalBookingFarmHouse', 'TotalBookingFarmhouse',
-          'FarmhouseBookings', 'FarmHouseBookings'
+          'TotalBookingFramHouse','TotalBookingFarmHouse','TotalBookingFarmhouse','FarmhouseBookings','FarmHouseBookings'
         );
 
         setFarmhouseData({
@@ -401,48 +840,34 @@ const TotalRevnueScreen = ({ navigation }) => {
           totalBookings: farmBookingsTotal,
           properties: [
             {
-              key:      'greystone',
-              label:    'Grey Stone',
-              badge:    'Farmhouse',
+              key: 'greystone', label: 'Grey Stone', badge: 'Farmhouse',
               revenue:  formatINR(greyRev),
-              bookings: safeNum(details,
-                'TotalBookingGreyStone', 'TotalBookingGreystone', 'GreyStoneBookings'
-              ),
+              bookings: safeNum(details,'TotalBookingGreyStone','TotalBookingGreystone','GreyStoneBookings'),
               progress: parseFloat((greyRev / farmMax).toFixed(2)),
-              icon:     require('../../Assets/icons/Greystone.png'),
+              icon: require('../../Assets/icons/Greystone.png'),
             },
             {
-              key:      'skystone',
-              label:    'Sky Stone',
-              badge:    'Farmhouse',
+              key: 'skystone', label: 'Sky Stone', badge: 'Farmhouse',
               revenue:  formatINR(skyRev),
-              bookings: safeNum(details,
-                'TotalBookingSkyStone', 'TotalBookingSkystone', 'SkyStoneBookings'
-              ),
+              bookings: safeNum(details,'TotalBookingSkyStone','TotalBookingSkystone','SkyStoneBookings'),
               progress: parseFloat((skyRev / farmMax).toFixed(2)),
-              icon:     require('../../Assets/icons/stonestays1.png'),
+              icon: require('../../Assets/icons/stonestays1.png'),
             },
           ],
         });
 
         // ── Airbnb ─────────────────────────────────────────────────────────
-        const topazRev = safeNum(details,
-          'TotalAmountTopaz', 'TotalAmountTopaze', 'totalAmountTopaz', 'TopazAmount'
-        );
-        const rubyRev = safeNum(details,
-          'TotalAmountRuby', 'totalAmountRuby', 'RubyAmount'
-        );
-        const sapphireRev = safeNum(details,
-          'TotalAmountSapphire', 'totalAmountSapphire', 'SapphireAmount'
-        );
-        const airbnbMax = Math.max(topazRev, rubyRev, sapphireRev, 1);
+        const topazRev    = safeNum(details,'TotalAmountTopaz','TotalAmountTopaze','totalAmountTopaz','TopazAmount');
+        const rubyRev     = safeNum(details,'TotalAmountRuby','totalAmountRuby','RubyAmount');
+        const sapphireRev = safeNum(details,'TotalAmountSapphire','totalAmountSapphire','SapphireAmount');
+        const airbnbMax   = Math.max(topazRev, rubyRev, sapphireRev, 1);
 
         const airbnbTotal = safeNum(details,
-          'TotalAmountAirbnb', 'TotalAmountAirBnb', 'totalAmountAirbnb', 'AirbnbAmount'
+          'TotalAmountAirbnb','TotalAmountAirBnb','totalAmountAirbnb','AirbnbAmount'
         ) || (topazRev + rubyRev + sapphireRev);
 
         const airbnbBookings = safeNum(details,
-          'TotalBookingAirbnb', 'TotalBookingAirBnb', 'totalBookingAirbnb', 'AirbnbBookings'
+          'TotalBookingAirbnb','TotalBookingAirBnb','totalBookingAirbnb','AirbnbBookings'
         );
 
         setAirbnbData({
@@ -450,43 +875,31 @@ const TotalRevnueScreen = ({ navigation }) => {
           totalBookings: airbnbBookings,
           properties: [
             {
-              key:      'topaz',
-              label:    'Topaz',
-              badge:    '2 BHK',
+              key: 'topaz', label: 'Topaz', badge: '2 BHK',
               revenue:  formatINR(topazRev),
-              bookings: safeNum(details,
-                'TotalBookingTopaze', 'TotalBookingTopaz', 'TopazBookings'
-              ),
+              bookings: safeNum(details,'TotalBookingTopaze','TotalBookingTopaz','TopazBookings'),
               progress: parseFloat((topazRev / airbnbMax).toFixed(2)),
-              icon:     require('../../Assets/icons/stonestays1.png'),
+              icon: require('../../Assets/icons/stonestays1.png'),
             },
             {
-              key:      'ruby',
-              label:    'Ruby',
-              badge:    '1 BHK',
+              key: 'ruby', label: 'Ruby', badge: '1 BHK',
               revenue:  formatINR(rubyRev),
-              bookings: safeNum(details,
-                'TotalBookingRuby', 'TotalBookingRubye', 'RubyBookings'
-              ),
+              bookings: safeNum(details,'TotalBookingRuby','TotalBookingRubye','RubyBookings'),
               progress: parseFloat((rubyRev / airbnbMax).toFixed(2)),
-              icon:     require('../../Assets/icons/stonestays1.png'),
+              icon: require('../../Assets/icons/stonestays1.png'),
             },
             {
-              key:      'sapphire',
-              label:    'Sapphire',
-              badge:    '1 BHK',
+              key: 'sapphire', label: 'Sapphire', badge: '1 BHK',
               revenue:  formatINR(sapphireRev),
-              bookings: safeNum(details,
-                'TotalBookingSapphire', 'SapphireBookings'
-              ),
+              bookings: safeNum(details,'TotalBookingSapphire','SapphireBookings'),
               progress: parseFloat((sapphireRev / airbnbMax).toFixed(2)),
-              icon:     require('../../Assets/icons/stonestays1.png'),
+              icon: require('../../Assets/icons/stonestays1.png'),
             },
           ],
         });
 
       } else {
-        setError(revenueDetails.message || 'Data load nahi ho saka.');
+        setError(revenueDetails.message || 'Unable to load data. Please try again.');
       }
     } catch (err) {
       console.log('❌ Revenue Fetch Error:', err);
@@ -494,12 +907,38 @@ const TotalRevnueScreen = ({ navigation }) => {
     } finally {
       setLoading(false);
     }
-  }, [period]); // ✅ FIX 3: period change hone par refetch
+  }, [period, customFrom, customTo]);
 
-  // ✅ FIX 3: period change hone par automatically refetch
   useEffect(() => {
-    fetchRevenueData();
-  }, [fetchRevenueData]);
+    // Don't auto-fetch for custom until dates are selected
+    if (period !== 'custom') {
+      fetchRevenueData();
+    }
+  }, [fetchRevenueData, period]);
+
+  // ── Period handler ─────────────────────────────────────────────────────────
+  const handlePeriodSelect = (key, from, to) => {
+    setPeriod(key);
+    if (key !== 'custom') {
+      setCustomFrom(null);
+      setCustomTo(null);
+    }
+  };
+
+  // ── Custom apply handler ───────────────────────────────────────────────────
+  const handleCustomApply = (from, to) => {
+    setCustomFrom(from);
+    setCustomTo(to);
+    setPeriod('custom');
+    // fetchRevenueData will run via useEffect because customFrom/customTo changed
+  };
+
+  // Separate effect to fire fetch when custom dates are set
+  useEffect(() => {
+    if (period === 'custom' && customFrom && customTo) {
+      fetchRevenueData();
+    }
+  }, [customFrom, customTo]);
 
   // ── Search filter ──────────────────────────────────────────────────────────
   const filterData = (data) => {
@@ -516,9 +955,8 @@ const TotalRevnueScreen = ({ navigation }) => {
 
   const filteredFarm   = filterData(farmhouseData);
   const filteredAirbnb = filterData(airbnbData);
-
-  const showFarm   = filteredFarm   && Array.isArray(filteredFarm.properties);
-  const showAirbnb = filteredAirbnb && Array.isArray(filteredAirbnb.properties);
+  const showFarm       = filteredFarm   && Array.isArray(filteredFarm.properties);
+  const showAirbnb     = filteredAirbnb && Array.isArray(filteredAirbnb.properties);
 
   // ── Header strip values ────────────────────────────────────────────────────
   const totalRevenue = formatINR(
@@ -528,6 +966,14 @@ const TotalRevnueScreen = ({ navigation }) => {
   const airbnbTotal = airbnbData?.totalRevenue    || '₹0';
   const farmProps   = farmhouseData?.properties?.length || 0;
   const airbnbProps = airbnbData?.properties?.length    || 0;
+
+  // Active period display label for strip
+  const periodLabel = (() => {
+    if (period === 'custom' && customFrom && customTo) {
+      return `${formatDisplayDate(customFrom)} – ${formatDisplayDate(customTo)}`;
+    }
+    return PERIOD_OPTIONS.find(o => o.key === period)?.label || 'Today';
+  })();
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -554,7 +1000,7 @@ const TotalRevnueScreen = ({ navigation }) => {
 
           <View style={styles.headerTitleBlock}>
             <Text style={styles.headerTitle}>Total Revenue</Text>
-            <Text style={styles.headerSubtitle}>All properties overview</Text>
+            <Text style={styles.headerSubtitle}>{periodLabel}</Text>
           </View>
 
           <TouchableOpacity
@@ -616,8 +1062,33 @@ const TotalRevnueScreen = ({ navigation }) => {
               </TouchableOpacity>
             )}
           </View>
-          <PeriodDropdown selected={period} onSelect={setPeriod} />
+
+          <PeriodDropdown
+            selected={period}
+            onSelect={handlePeriodSelect}
+            customFrom={customFrom}
+            customTo={customTo}
+            onCustomApply={handleCustomApply}
+          />
         </View>
+
+        {/* Custom range banner — shows selected range */}
+        {period === 'custom' && customFrom && customTo && (
+          <View style={styles.customBanner}>
+            <Text style={styles.customBannerIcon}>📅</Text>
+            <Text style={styles.customBannerTxt}>
+              {formatDisplayDate(customFrom)} → {formatDisplayDate(customTo)}
+            </Text>
+          </View>
+        )}
+
+        {/* Waiting for custom dates */}
+        {period === 'custom' && (!customFrom || !customTo) && (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyEmoji}>📅</Text>
+            <Text style={styles.emptyTxt}>Select a custom date range to view data</Text>
+          </View>
+        )}
 
         {/* Loading */}
         {loading && <LoadingSkeleton />}
@@ -634,7 +1105,7 @@ const TotalRevnueScreen = ({ navigation }) => {
         )}
 
         {/* Empty */}
-        {!loading && !error && !showFarm && !showAirbnb && (
+        {!loading && !error && !showFarm && !showAirbnb && period !== 'custom' && (
           <View style={styles.emptyState}>
             <Text style={styles.emptyEmoji}>🔍</Text>
             <Text style={styles.emptyTxt}>
@@ -681,7 +1152,7 @@ const TotalRevnueScreen = ({ navigation }) => {
 export default TotalRevnueScreen;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 10. STYLES
+// 12. STYLES
 // ─────────────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
@@ -690,43 +1161,35 @@ const styles = StyleSheet.create({
 
   header: {
     backgroundColor: Colors.header_dark,
-    paddingTop:      8,
-    overflow:        'hidden',
-    marginTop:       27,
+    paddingTop: 8,
+    overflow: 'hidden',
+    marginTop: 27,
   },
   headerTop: {
-    flexDirection:     'row',
-    alignItems:        'center',
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 20,
-    paddingBottom:     18,
-    zIndex:            2,
+    paddingBottom: 18,
+    zIndex: 2,
   },
   backBtn: {
-    width:           36,
-    height:          36,
-    borderRadius:    10,
+    width: 36, height: 36, borderRadius: 10,
     backgroundColor: 'rgba(255,255,255,0.12)',
-    alignItems:      'center',
-    justifyContent:  'center',
-    marginRight:     14,
+    alignItems: 'center', justifyContent: 'center',
+    marginRight: 14,
   },
   backIcon:         { width: 18, height: 18, tintColor: Colors.text_white },
   headerTitleBlock: { flex: 1 },
   headerTitle: {
-    color:        Colors.text_white,
-    fontSize:     F.f17,
-    fontWeight:   '600',
-    marginBottom: 3,
+    color: Colors.text_white, fontSize: F.f17,
+    fontWeight: '600', marginBottom: 3,
   },
   headerSubtitle: { color: Colors.text_muted, fontSize: F.f12 },
 
   refreshBtn: {
-    width:           36,
-    height:          36,
-    borderRadius:    10,
+    width: 36, height: 36, borderRadius: 10,
     backgroundColor: 'rgba(255,255,255,0.12)',
-    alignItems:      'center',
-    justifyContent:  'center',
+    alignItems: 'center', justifyContent: 'center',
   },
   refreshIcon: { fontSize: 20, color: Colors.text_white, fontWeight: '700' },
 
@@ -742,10 +1205,9 @@ const styles = StyleSheet.create({
   },
 
   summaryStrip: {
-    flexDirection:   'row',
+    flexDirection: 'row',
     backgroundColor: Colors.strip_bg,
-    borderTopWidth:  0.5,
-    borderTopColor:  Colors.border_white,
+    borderTopWidth: 0.5, borderTopColor: Colors.border_white,
   },
   stripItem:       { flex: 1, padding: 11 },
   stripItemBorder: { borderRightWidth: 0.5, borderRightColor: Colors.border_white },
@@ -759,23 +1221,13 @@ const styles = StyleSheet.create({
   body:        { flex: 1, backgroundColor: Colors.page_bg },
   bodyContent: { paddingHorizontal: 14, paddingTop: 14, paddingBottom: 34, gap: 12 },
 
-  filterRow: {
-    flexDirection: 'row',
-    alignItems:    'center',
-    gap:           8,
-  },
+  filterRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
 
   searchWrap: {
-    flex:              1,
-    flexDirection:     'row',
-    alignItems:        'center',
-    backgroundColor:   Colors.card_bg,
-    borderRadius:      12,
-    borderWidth:       1,
-    borderColor:       Colors.border,
-    paddingHorizontal: 12,
-    height:            46,
-    gap:               8,
+    flex: 1, flexDirection: 'row', alignItems: 'center',
+    backgroundColor: Colors.card_bg, borderRadius: 12,
+    borderWidth: 1, borderColor: Colors.border,
+    paddingHorizontal: 12, height: 46, gap: 8,
     ...Platform.select({
       ios:     { shadowColor: '#0F766E', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.07, shadowRadius: 4 },
       android: { elevation: 1 },
@@ -787,20 +1239,18 @@ const styles = StyleSheet.create({
   searchClearTxt: { fontSize: F.f10, color: Colors.text_label },
 
   periodChip: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    backgroundColor:   Colors.header_dark,
-    borderRadius:      12,
-    paddingHorizontal: 10,
-    paddingVertical:   0,
-    height:            46,
-    gap:               5,
-    minWidth:          80,
-    justifyContent:    'center',
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: Colors.header_dark,
+    borderRadius: 12, paddingHorizontal: 10, paddingVertical: 0,
+    height: 46, gap: 5, minWidth: 80, justifyContent: 'center',
     ...Platform.select({
       ios:     { shadowColor: '#0F766E', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.20, shadowRadius: 4 },
       android: { elevation: 3 },
     }),
+  },
+  // Custom range active chip — teal tint
+  periodChipCustom: {
+    backgroundColor: Colors.primary,
   },
   chipCalIcon: {
     width: 14, height: 14,
@@ -816,14 +1266,32 @@ const styles = StyleSheet.create({
   chipLabel:  { fontSize: F.f12, fontWeight: '600', color: Colors.text_white, flexShrink: 1 },
   chipArrow:  { fontSize: F.f10, color: 'rgba(255,255,255,0.8)' },
 
+  // Custom range active banner
+  customBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: Colors.primary_light,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 0.5,
+    borderColor: Colors.primary_border,
+  },
+  customBannerIcon: { fontSize: 14 },
+  customBannerTxt: {
+    fontSize: F.f13,
+    fontWeight: '600',
+    color: Colors.primary_text,
+  },
+
   ddOverlay: {
     flex: 1, backgroundColor: 'rgba(15,23,42,0.45)', justifyContent: 'flex-end',
   },
   ddSheet: {
-    backgroundColor:      Colors.card_bg,
-    borderTopLeftRadius:  24,
-    borderTopRightRadius: 24,
-    paddingBottom:        40,
+    backgroundColor: Colors.card_bg,
+    borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    paddingBottom: 40,
   },
   ddHandle: {
     alignSelf: 'center', width: 40, height: 4,
@@ -861,11 +1329,8 @@ const styles = StyleSheet.create({
   ddCheck:       { fontSize: F.f16, color: Colors.primary, fontWeight: '700' },
 
   revCard: {
-    backgroundColor: Colors.card_bg,
-    borderRadius:    16,
-    borderWidth:     0.5,
-    borderColor:     Colors.border,
-    overflow:        'hidden',
+    backgroundColor: Colors.card_bg, borderRadius: 16,
+    borderWidth: 0.5, borderColor: Colors.border, overflow: 'hidden',
     ...Platform.select({
       ios:     { shadowColor: '#0F766E', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8 },
       android: { elevation: 2 },
@@ -888,8 +1353,8 @@ const styles = StyleSheet.create({
   revCardBody:  { padding: 14, gap: 10 },
 
   totalBadge: {
-    backgroundColor: Colors.primary_light,
-    borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4,
+    backgroundColor: Colors.primary_light, borderRadius: 8,
+    paddingHorizontal: 10, paddingVertical: 4,
     borderWidth: 0.5, borderColor: Colors.primary_border,
   },
   totalBadgeText: { color: Colors.primary, fontSize: F.f13, fontWeight: '600' },
@@ -930,7 +1395,6 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     backgroundColor: Colors.header_dark,
     borderRadius: 10, paddingHorizontal: 14, paddingVertical: 14,
-    
   },
   viewBtnText: { color: Colors.text_white, fontSize: F.f14, fontWeight: '600', textAlign: 'center' },
 
@@ -945,5 +1409,5 @@ const styles = StyleSheet.create({
 
   emptyState:  { alignItems: 'center', paddingVertical: 40 },
   emptyEmoji:  { fontSize: 34, marginBottom: 10 },
-  emptyTxt:    { fontSize: F.f13, color: Colors.text_label },
+  emptyTxt:    { fontSize: F.f13, color: Colors.text_label, textAlign: 'center' },
 });

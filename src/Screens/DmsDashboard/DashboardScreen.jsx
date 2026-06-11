@@ -81,7 +81,6 @@ const CommonWidths = {
 
 const NAV_TABS = [
   { key: 'Home',    label: 'Home',    icon: require('../../Assets/icons/home.png') },
-  { key: 'Members', label: 'Members', icon: require('../../Assets/icons/members.png') },
   { key: 'Enquiry', label: 'Enquiry', icon: require('../../Assets/icons/plus2.png') },
   { key: 'Reports', label: 'Reports', icon: require('../../Assets/icons/reports2.png') },
   { key: 'Logout',  label: 'Logout',  icon: require('../../Assets/icons/logout2.png') },
@@ -321,74 +320,78 @@ const DashboardScreen = ({ navigation }) => {
   const [totalEnquiries,      setTotalEnquiries]      = useState(0);
 
   // ── Fetch Dashboard ───────────────────────────────────────────────────────
+const fetchDashboardData = useCallback(async (periodKey, fromDate = '', toDate = '') => {
+  try {
+    setLoading(true);
 
-  const fetchDashboardData = useCallback(async (fromDate = '', toDate = '') => {
-    try {
-      setLoading(true);
+    // periodKey nahi aaya toh selectedPeriod use karo
+    const activePeriod = periodKey ?? selectedPeriod;
+    const filterType   = PERIOD_MAP[activePeriod] ?? 'ThisMonth';
 
-      const filterType = PERIOD_MAP[selectedPeriod] ?? 'Today';
-      const result     = await getDashboardTotals(filterType, fromDate, toDate);
+    console.log('🎯 ACTIVE PERIOD =>', activePeriod);
+    console.log('🎯 FILTER TYPE GOING TO API =>', filterType);
 
-      console.log('📦 FULL API RESULT =>', JSON.stringify(result));
+    const result = await getDashboardTotals(filterType, fromDate, toDate);
 
-      if (!result?.success) {
-        console.warn('⚠️ API success=false:', result);
-        setDashboardData({});
-        return;
-      }
+    console.log('📦 FULL API RESULT =>', JSON.stringify(result));
 
-      let rawData = result?.data?.data ?? result?.data ?? null;
-      let parsedArray = [];
-
-      if (typeof rawData === 'string') {
-        try { parsedArray = JSON.parse(rawData); } catch { parsedArray = []; }
-      } else if (Array.isArray(rawData)) {
-        parsedArray = rawData;
-      } else if (rawData && typeof rawData === 'object') {
-        parsedArray = [rawData];
-      }
-
-      const firstItem = parsedArray[0] || {};
-      console.log('✅ DASHBOARD ITEM =>', JSON.stringify(firstItem));
-      console.log('🔑 AVAILABLE KEYS =>', Object.keys(firstItem));
-      setDashboardData(firstItem);
-
-    } catch (error) {
-      console.error('❌ FETCH ERROR =>', error);
+    if (!result?.success) {
       setDashboardData({});
-    } finally {
-      setLoading(false);
+      return;
     }
-  }, [selectedPeriod]);
+
+    let rawData     = result?.data?.data ?? result?.data ?? null;
+    let parsedArray = [];
+
+    if (typeof rawData === 'string') {
+      try { parsedArray = JSON.parse(rawData); } catch { parsedArray = []; }
+    } else if (Array.isArray(rawData)) {
+      parsedArray = rawData;
+    } else if (rawData && typeof rawData === 'object') {
+      parsedArray = [rawData];
+    }
+
+    const firstItem = parsedArray[0] || {};
+    console.log('✅ DASHBOARD ITEM =>', JSON.stringify(firstItem));
+    setDashboardData(firstItem);
+
+  } catch (error) {
+    console.error('❌ FETCH ERROR =>', error);
+    setDashboardData({});
+  } finally {
+    setLoading(false);
+  }
+}, [selectedPeriod]);
 
   // ── Fetch Enquiries Count ─────────────────────────────────────────────────
 
-  const fetchEnquiriesCount = useCallback(async () => {
-    try {
-      const result = await getEnquiries();
-      if (result.success) {
-        setTotalEnquiries(result.data.length);
-        console.log('✅ TOTAL ENQUIRIES =>', result.data.length);
-      }
-    } catch (error) {
-      console.log('❌ ENQUIRY ERROR =>', error);
+const fetchEnquiriesCount = useCallback(async (periodKey) => {
+  try {
+    const result = await getEnquiries();
+    if (result.success) {
+      console.log('ENQUIRY SAMPLE =>', JSON.stringify(result.data[0], null, 2)); // ← yeh add karo
+      setTotalEnquiries(result.data.length);
     }
-  }, []);
+  } catch (error) {
+    console.log('❌ ENQUIRY ERROR =>', error);
+  }
+}, [selectedPeriod]);
 
-  // ── Pull-to-Refresh ───────────────────────────────────────────────────────
+  // ── pull to refresh ───────────────────────────────────────────────────────
 
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await Promise.all([fetchDashboardData(), fetchEnquiriesCount()]);
-    setRefreshing(false);
-  }, [fetchDashboardData, fetchEnquiriesCount]);
+const onRefresh = useCallback(async () => {
+  setRefreshing(true);
+  await Promise.all([
+    fetchDashboardData(selectedPeriod),
+    fetchEnquiriesCount(selectedPeriod), 
+  ]);
+  setRefreshing(false);
+}, [selectedPeriod]);
 
-  // ── Period change → refetch ───────────────────────────────────────────────
-
-  useEffect(() => {
-    fetchDashboardData();
-    fetchEnquiriesCount();
-  }, [fetchDashboardData, fetchEnquiriesCount]);
+useEffect(() => {
+  fetchDashboardData(selectedPeriod);
+  fetchEnquiriesCount(selectedPeriod); 
+}, [selectedPeriod]);
 
   // ── Overview Cards ────────────────────────────────────────────────────────
 
@@ -428,30 +431,30 @@ const DashboardScreen = ({ navigation }) => {
   // ── Handlers ──────────────────────────────────────────────────────────────
 
   const handlePeriodSelect = (item) => {
-    setSelectedPeriod(item);
-    setDdOpen(false);
-    if (item === 'Custom') {
-      // Reset dates and open custom modal
-      setCustomFrom('');
-      setCustomTo('');
-      setCustomModalVisible(true);
-    }
-  };
-
+  setSelectedPeriod(item);
+  setDdOpen(false);
+  if (item === 'Custom') {
+    setCustomFrom('');
+    setCustomTo('');
+    setCustomModalVisible(true);
+  } else {
+    fetchDashboardData(item); // ← turant fetch karo, state update ka wait mat karo
+  }
+};
   const handleApplyCustom = () => {
-    setCustomModalVisible(false);
-    const toApi = (str) => {
-      const [dd, mm, yyyy] = str.split('/');
-      return `${yyyy}-${mm}-${dd}`;
-    };
-    fetchDashboardData(toApi(customFrom), toApi(customTo));
+  setCustomModalVisible(false);
+  const toApi = (str) => {
+    const [dd, mm, yyyy] = str.split('/');
+    return `${yyyy}-${mm}-${dd}`;
   };
+  fetchDashboardData('Custom', toApi(customFrom), toApi(customTo)); // ← period bhi pass karo
+};
 
   const handleTabPress = (tab) => {
     if (tab.key === 'Logout')  { navigation.replace('DmsLoginScreen');    return; }
     if (tab.key === 'Reports') { navigation.navigate('ReportsScreen');    return; }
     if (tab.key === 'Enquiry') { navigation.navigate('NewEnquiryScreen'); return; }
-    if (tab.key === 'Members') { navigation.navigate('MembersScreen');    return; }
+  
     setActiveTab(tab.key);
   };
 
