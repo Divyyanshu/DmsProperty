@@ -16,24 +16,14 @@ import {
 } from 'react-native';
 import { insertExpense } from '../../Api/ApiService';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 1. RESPONSIVE HELPERS
-// ─────────────────────────────────────────────────────────────────────────────
 
 const BASE_WIDTH = 375;
-
 const fs = (size, winW) => {
   const ratio = winW / BASE_WIDTH;
   const scaled = size * ratio;
   return clamp(scaled, size * 0.82, size * 1.18);
 };
-
 const clamp = (val, min, max) => Math.min(Math.max(val, min), max);
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 2. COLORS
-// ─────────────────────────────────────────────────────────────────────────────
-
 const Colors = {
   bg_dark:      '#0F172A',
   primary:      '#F59E0B',
