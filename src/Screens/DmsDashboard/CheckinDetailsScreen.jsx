@@ -4,13 +4,13 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
   StatusBar,
   Image,
   ScrollView,
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { getNewBookings } from '../../Api/ApiService';
 
 const Colors = {
@@ -182,8 +182,12 @@ const CheckinDetailsScreen = ({ navigation }) => {
   }, []);
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar backgroundColor={Colors.bg_dark} barStyle="light-content" />
+   <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+            <StatusBar
+              backgroundColor={Colors.bg_dark}
+              barStyle="light-content"
+              translucent={false}
+            />
 
       {/* ── HEADER ── */}
       <View style={styles.header}>

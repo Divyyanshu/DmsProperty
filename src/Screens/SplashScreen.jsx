@@ -8,8 +8,8 @@ import {
   Easing,
   Dimensions,
   StatusBar,
-  SafeAreaView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Colors from '../Constants/Colors';
 
@@ -174,7 +174,12 @@ useEffect(() => {
       {/* ── Gold accent bar top-left ───────────────────────────────────── */}
       
 
-      <SafeAreaView style={styles.safeArea}>
+     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+                    <StatusBar
+                      backgroundColor={Colors.bg_dark}
+                      barStyle="light-content"
+                      translucent={false}
+                    />
         {/* ── Center content ────────────────────────────────────────────── */}
         <View style={styles.centerBlock}>
           {/* Logo icon */}

@@ -4,7 +4,7 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
+ 
   StatusBar,
   Image,
   ScrollView,
@@ -25,6 +25,7 @@ import {
   getSingleEnquiry,
   updateEnquiry,
 } from '../../Api/ApiService';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import AxiosClient from '../../Api/AxoisClient';
 import { ENDPOINTS } from '../../Api/EndPoints';
 
@@ -1526,8 +1527,12 @@ const ReportsScreen = ({ navigation, route }) => {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar backgroundColor={Colors.bg_dark} barStyle="light-content" />
+    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+         <StatusBar
+           backgroundColor={Colors.bg_dark}
+           barStyle="light-content"
+           translucent={false}
+         />
 
       <View style={styles.header}>
         <TouchableOpacity

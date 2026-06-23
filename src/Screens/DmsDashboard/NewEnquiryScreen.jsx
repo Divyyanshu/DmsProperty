@@ -4,7 +4,6 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
   StatusBar,
   Image,
   ScrollView,
@@ -15,6 +14,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   insertEnquiry,
   updateEnquiry,
@@ -1035,8 +1035,12 @@ const NewEnquiryScreen = ({ navigation, route }) => {
 
   // ── Main render ────────────────────────────────────────────────────────────
   return (
-    <SafeAreaView style={screenSt.safeArea}>
-      <StatusBar backgroundColor={Colors.bg_dark} barStyle="light-content" />
+    <SafeAreaView style={screenSt.safeArea} edges={['top', 'bottom']}>
+            <StatusBar
+              backgroundColor={Colors.bg_dark}
+              barStyle="light-content"
+              translucent={false}
+            />
 
       {/* HEADER */}
       <View style={screenSt.header}>

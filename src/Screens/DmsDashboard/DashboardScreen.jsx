@@ -962,8 +962,6 @@ const DashboardScreen = ({ navigation }) => {
 
 export default DashboardScreen;
 
-// ─── Main Styles ──────────────────────────────────────────────────────────────
-
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -1260,10 +1258,10 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.nav_bg,
     borderTopWidth: 1,
     borderTopColor: Colors.inputBorder,
-    paddingBottom: Platform.OS === 'android' ? 45 : 36,
+    paddingBottom: Platform.OS === 'android' ? 15 : 36,
     paddingTop: 12,
     paddingHorizontal: 4,
-    height: Platform.OS === 'android' ? 100 : 84,
+    height: Platform.OS === 'android' ? 65 : 84,
   },
   navTab: {
     flex: 1,

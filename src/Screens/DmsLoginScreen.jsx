@@ -7,7 +7,6 @@ import {
   StyleSheet,
   StatusBar,
   Image,
-  ScrollView,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
@@ -383,7 +382,7 @@ const DmsLoginScreen = ({ navigation }) => {
           Platform.OS === 'android' ? StatusBar.currentHeight ?? 24 : 0
         }
       >
-        <ScrollView
+        <View
           contentContainerStyle={[
             styles.scrollContent,
             { paddingBottom: BOTTOM_SPACE + 24 },
@@ -490,8 +489,6 @@ const DmsLoginScreen = ({ navigation }) => {
             {usernameError ? (
               <Text style={styles.errorText}>{usernameError}</Text>
             ) : null}
-
-            {/* ── PASSWORD INPUT ────────────────────────────────── */}
             <Text
               style={[styles.fieldLabel, { marginTop: CommonHeights.height16 }]}
             >
@@ -631,7 +628,7 @@ const DmsLoginScreen = ({ navigation }) => {
               </View>
             ) : null}
           </View>
-        </ScrollView>
+        </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -799,8 +796,6 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     fontWeight: '500',
   },
-
-  // ── Warning Banner ─────────────────────────────────────────────────────
   warningBanner: {
     flexDirection: 'row',
     alignItems: 'flex-start',

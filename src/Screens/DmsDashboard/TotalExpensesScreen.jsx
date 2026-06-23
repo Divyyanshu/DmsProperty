@@ -4,7 +4,6 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
   StatusBar,
   Image,
   ScrollView,
@@ -16,6 +15,7 @@ import {
   ActivityIndicator,
   TextInput,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import FarmhouseExpenses from './Modals/FarmhousExpenses';
 import AirbnbExpenses   from './Modals/AirbnbExpenses';
 import { getExpenses }  from '../../Api/ApiService';
@@ -423,8 +423,12 @@ const TotalExpensesScreen = ({ navigation }) => {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar backgroundColor={Colors.header_dark} barStyle="light-content" />
+    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+               <StatusBar
+                 backgroundColor={Colors.bg_dark}
+                 barStyle="light-content"
+                 translucent={false}
+               />
 
       {/* ── HEADER ─────────────────────────────────────────────────────────── */}
       <View style={styles.header}>
