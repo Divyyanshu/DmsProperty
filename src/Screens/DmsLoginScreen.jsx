@@ -149,8 +149,6 @@ const DmsLoginScreen = ({ navigation }) => {
     !passwordError;
   const isFormDisabled = isLoading || isSuccess;
 
-  // ── Event Handlers ──────────────────────────────────────────────────
-
   const handleUsernameChange = text => {
     setUsername(text);
     if (usernameError) setUsernameError('');
