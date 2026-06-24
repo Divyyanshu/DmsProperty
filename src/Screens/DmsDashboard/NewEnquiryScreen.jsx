@@ -95,7 +95,7 @@ const PROPERTIES = {
   ],
 };
 
-// ✅ NEW — Host options (same as NewBookingScreen)
+// NEW — Host options (same as NewBookingScreen)
 const HOST_OPTIONS = [
   { key: 'chetan', label: 'Chetan', emoji: '👤' },
   { key: 'nitesh', label: 'Nitesh', emoji: '👤' },
@@ -429,7 +429,7 @@ const CalendarPicker = ({
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 6. MODAL DROPDOWN  ✅ NEW — copied from NewBookingScreen
+// 6. MODAL DROPDOWN  NEW — copied from NewBookingScreen
 // ─────────────────────────────────────────────────────────────────────────────
 
 const ModalDropdown = ({ placeholder, value, onChange, items, label }) => {
@@ -643,7 +643,7 @@ const DateRow = ({
   </View>
 );
 
-// ✅ FIXED AmountInput — scrollRef se scroll karta hai jab focus hota hai
+// FIXED AmountInput — scrollRef se scroll karta hai jab focus hota hai
 const AmountInput = ({ value, onChangeText, scrollRef }) => {
   const [focused, setFocused] = useState(false);
   const containerRef = useRef(null);
@@ -765,21 +765,11 @@ const DurationChips = ({ value, onChange }) => (
   </View>
 );
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 8. MAIN SCREEN
-// ─────────────────────────────────────────────────────────────────────────────
-
 const NewEnquiryScreen = ({ navigation, route }) => {
-  // ── Edit mode detect ───────────────────────────────────────────────────────
   const enquiryId = route?.params?.enquiryId ?? null;
   const isEditMode = !!enquiryId;
-
-  // ✅ ScrollView ref — AmountInput scroll fix ke liye
   const scrollRef = useRef(null);
-
-  // ── Prefill loading state ──────────────────────────────────────────────────
   const [prefillLoading, setPrefillLoading] = useState(isEditMode);
-
   const [categoryOpen, setCategoryOpen] = useState(false);
   const [propertyOpen, setPropertyOpen] = useState(false);
   const [selectedCat, setSelectedCat] = useState(null);
@@ -790,8 +780,6 @@ const NewEnquiryScreen = ({ navigation, route }) => {
   const [email, setEmail] = useState('');
   const [dob, setDob] = useState('');
   const [gender, setGender] = useState('Male');
-
-  // ✅ NEW — Host state
   const [host, setHost] = useState(null);
 
   const [duration, setDuration] = useState('');
@@ -864,7 +852,7 @@ const NewEnquiryScreen = ({ navigation, route }) => {
         setSpecialReq(raw.SpecialRequests ?? raw.specialRequests ?? '');
         setEnquiryStatus(raw.EnquiryStatus ?? raw.enquiryStatus ?? 'Pending');
 
-        // ✅ NEW — Host prefill
+        // NEW — Host prefill
         setHost(
           HOST_OPTIONS.find(
             h =>
@@ -873,7 +861,7 @@ const NewEnquiryScreen = ({ navigation, route }) => {
           ) ?? null,
         );
       } catch (err) {
-        console.log('❌ loadEnquiry error:', err);
+        console.log('loadEnquiry error:', err);
         Alert.alert('Error', 'Enquiry load karne mein problem aayi.');
       } finally {
         setPrefillLoading(false);
@@ -890,7 +878,7 @@ const NewEnquiryScreen = ({ navigation, route }) => {
     setCategoryOpen(false);
     setPropertyOpen(false);
     setServices([]);
-    setHost(null); // ✅ category change hone par host reset
+    setHost(null); // category change hone par host reset
   };
 
   const handlePropertySelect = prop => {
@@ -898,77 +886,140 @@ const NewEnquiryScreen = ({ navigation, route }) => {
     setPropertyOpen(false);
   };
 
-  // ── Submit: insert OR update ───────────────────────────────────────────────
   const handleSubmitEnquiry = async () => {
-    if (!fullName.trim() || !mobile.trim()) {
-      Alert.alert(
-        'Validation Error',
-        'Full Name aur Mobile Number zaroori hain',
-      );
-      return;
-    }
+  // ── Category & Property ──────────────────────────────────────────────────
+  if (!selectedCat) {
+    Alert.alert('Missing Information', 'Please select a category to proceed.');
+    return;
+  }
+  if (!selectedProp) {
+    Alert.alert('Missing Information', 'Please select a property to proceed.');
+    return;
+  }
 
-    setIsSubmitting(true);
-    try {
-      const enquiryData = {
-        Category: selectedCat?.label || '',
-        PropertyName: selectedProp?.label || '',
-        FullName: fullName,
-        MobileNumber: mobile,
-        EmailId: email,
-        Host: host?.label || '', // ✅ NEW
-        CheckInDate: formatDateForApi(checkIn),
-        CheckOutDate: formatDateForApi(checkOut),
-        NoOfGuest: guests,
-        Adults: adults,
-        Children: children,
-        SpecialRequests: specialReq,
-        EstimatedAmount: estAmount,
-      };
+  // ── Customer Info ────────────────────────────────────────────────────────
+  if (!fullName.trim()) {
+    Alert.alert('Missing Information', 'Full name is required.');
+    return;
+  }
+  if (!mobile.trim()) {
+    Alert.alert('Missing Information', 'Mobile number is required.');
+    return;
+  }
+  if (mobile.trim().length < 10) {
+    Alert.alert('Invalid Input', 'Please enter a valid 10-digit mobile number.');
+    return;
+  }
+  if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+    Alert.alert('Invalid Input', 'Please enter a valid email address.');
+    return;
+  }
 
-      let result;
+  // ── Booking / Stay Details ───────────────────────────────────────────────
+  if (!host) {
+    Alert.alert('Missing Information', 'Please select a host.');
+    return;
+  }
+  if (!checkIn) {
+    Alert.alert('Missing Information', 'Please select a check-in date.');
+    return;
+  }
+  if (!checkOut) {
+    Alert.alert('Missing Information', 'Please select a check-out date.');
+    return;
+  }
 
-      if (isEditMode) {
-        const updatePayload = {
-          ...enquiryData,
-          Id: enquiryId,
-          EnquiryStatus: enquiryStatus,
-        };
-        console.log(
-          '📦 UPDATE ENQUIRY PAYLOAD =>',
-          JSON.stringify(updatePayload, null, 2),
-        );
-        result = await updateEnquiry(updatePayload);
-      } else {
-        console.log(
-          '📦 INSERT ENQUIRY PAYLOAD =>',
-          JSON.stringify(enquiryData, null, 2),
-        );
-        result = await insertEnquiry(enquiryData);
-      }
-
-      if (result.success) {
-        Alert.alert(
-          isEditMode ? '✅ Updated' : '✅ Success',
-          isEditMode
-            ? 'Enquiry successfully update ho gayi!'
-            : 'Enquiry successfully submit ho gayi!',
-          [{ text: 'OK', onPress: () => navigation.goBack() }],
-        );
-      } else {
-        Alert.alert(
-          '❌ Error',
-          result.message ||
-            (isEditMode ? 'Update failed' : 'Submission failed'),
-        );
-      }
-    } catch (error) {
-      console.log('❌ Submit Error:', error);
-      Alert.alert('Error', 'Kuch galat ho gaya. Please try again.');
-    } finally {
-      setIsSubmitting(false);
-    }
+  // Check-out must be after check-in
+  const parseDate = str => {
+    const [dd, mm, yyyy] = str.split('/');
+    return new Date(Number(yyyy), Number(mm) - 1, Number(dd));
   };
+  if (parseDate(checkOut) <= parseDate(checkIn)) {
+    Alert.alert('Invalid Dates', 'Check-out date must be after the check-in date.');
+    return;
+  }
+
+  if (!guests.trim() || isNaN(guests) || Number(guests) < 1) {
+    Alert.alert('Invalid Input', 'Please enter a valid number of guests.');
+    return;
+  }
+
+  if (!adults.trim() || isNaN(adults) || Number(adults) < 1) {
+    Alert.alert('Invalid Input', 'Please enter the number of adults (minimum 1).');
+    return;
+  }
+  if (children.trim() && (isNaN(children) || Number(children) < 0)) {
+    Alert.alert('Invalid Input', 'Please enter a valid number of children.');
+    return;
+  }
+
+  // Adults + Children should not exceed total guests
+  const totalBreakdown = Number(adults || 0) + Number(children || 0);
+  if (totalBreakdown > Number(guests)) {
+    Alert.alert(
+      'Guest Count Mismatch',
+      `Adults (${adults}) + Children (${children || 0}) cannot exceed total guests (${guests}).`,
+    );
+    return;
+  }
+
+  if (!estAmount.trim() || isNaN(estAmount) || Number(estAmount) <= 0) {
+    Alert.alert('Missing Information', 'Please enter a valid estimated amount.');
+    return;
+  }
+
+  // ── All good — submit ────────────────────────────────────────────────────
+  setIsSubmitting(true);
+  try {
+    const enquiryData = {
+      Category: selectedCat?.label || '',
+      PropertyName: selectedProp?.label || '',
+      FullName: fullName.trim(),
+      MobileNumber: mobile.trim(),
+      EmailId: email.trim(),
+      Host: host?.label || '',
+      CheckInDate: formatDateForApi(checkIn),
+      CheckOutDate: formatDateForApi(checkOut),
+      NoOfGuest: guests,
+      Adults: adults,
+      Children: children || '0',
+      SpecialRequests: specialReq,
+      EstimatedAmount: estAmount,
+    };
+
+    let result;
+
+    if (isEditMode) {
+      const updatePayload = {
+        ...enquiryData,
+        Id: enquiryId,
+        EnquiryStatus: enquiryStatus,
+      };
+      console.log('UPDATE ENQUIRY PAYLOAD =>', JSON.stringify(updatePayload, null, 2));
+      result = await updateEnquiry(updatePayload);
+    } else {
+      console.log('INSERT ENQUIRY PAYLOAD =>', JSON.stringify(enquiryData, null, 2));
+      result = await insertEnquiry(enquiryData);
+    }
+
+    if (result.success) {
+      Alert.alert(
+        isEditMode ? 'Updated Successfully' : 'Enquiry Submitted',
+        isEditMode
+          ? 'The enquiry has been updated successfully.'
+          : 'Your enquiry has been submitted successfully.',
+        [{ text: 'OK', onPress: () => navigation.goBack() }],
+      );
+    } else {
+      Alert.alert('Submission Failed', result.message || 'Something went wrong. Please try again.');
+    }
+  } catch (error) {
+    console.log('Submit Error:', error);
+    Alert.alert('Error', 'An unexpected error occurred. Please try again.');
+  } finally {
+    setIsSubmitting(false);
+  }
+};
 
   // ── Derived values ─────────────────────────────────────────────────────────
   const catKey = selectedCat?.key || '';
@@ -1036,11 +1087,11 @@ const NewEnquiryScreen = ({ navigation, route }) => {
   // ── Main render ────────────────────────────────────────────────────────────
   return (
     <SafeAreaView style={screenSt.safeArea} edges={['top', 'bottom']}>
-            <StatusBar
-              backgroundColor={Colors.bg_dark}
-              barStyle="light-content"
-              translucent={false}
-            />
+      <StatusBar
+        backgroundColor={Colors.bg_dark}
+        barStyle="light-content"
+        translucent={false}
+      />
 
       {/* HEADER */}
       <View style={screenSt.header}>
@@ -1067,7 +1118,7 @@ const NewEnquiryScreen = ({ navigation, route }) => {
         <View style={screenSt.goldLine} />
       </View>
 
-      {/* ✅ KeyboardAvoidingView — keyboard aane par scroll sahi se kaam kare */}
+      {/* KeyboardAvoidingView — keyboard aane par scroll sahi se kaam kare */}
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -1179,7 +1230,7 @@ const NewEnquiryScreen = ({ navigation, route }) => {
                   iconBg={Colors.gold_icon_bg}
                   title="BOOKING DETAILS"
                 >
-                  {/* ✅ NEW — Host dropdown */}
+                  {/* NEW — Host dropdown */}
                   <ModalDropdown
                     label="HOST"
                     placeholder="Select Host"
@@ -1197,6 +1248,27 @@ const NewEnquiryScreen = ({ navigation, route }) => {
                     onRightChange={setCheckOut}
                     availability={activeAvailability}
                   />
+                    {/* ── NEW: Adults + Children ── */}
+    <View style={{ flexDirection: 'row', gap: 10 }}>
+      <View style={{ flex: 1 }}>
+        <FieldLabel text="ADULTS" />
+        <FormInput
+          placeholder="Adults"
+          value={adults}
+          onChangeText={setAdults}
+          keyboardType="numeric"
+        />
+      </View>
+      <View style={{ flex: 1 }}>
+        <FieldLabel text="CHILDREN" />
+        <FormInput
+          placeholder="Children"
+          value={children}
+          onChangeText={setChildren}
+          keyboardType="numeric"
+        />
+      </View>
+    </View>
                   <View>
                     <FieldLabel text="NO. OF GUESTS" />
                     <FormInput
@@ -1209,7 +1281,7 @@ const NewEnquiryScreen = ({ navigation, route }) => {
                   </View>
                   <View>
                     <FieldLabel text="ESTIMATED AMOUNT" />
-                    {/* ✅ FIXED — scrollRef pass kiya */}
+                    {/* FIXED — scrollRef pass kiya */}
                     <AmountInput
                       value={estAmount}
                       onChangeText={setEstAmount}
@@ -1226,7 +1298,7 @@ const NewEnquiryScreen = ({ navigation, route }) => {
                   iconBg={Colors.gold_icon_bg}
                   title="STAY DETAILS"
                 >
-                  {/* ✅ NEW — Host dropdown */}
+                  {/* NEW — Host dropdown */}
                   <ModalDropdown
                     label="HOST"
                     placeholder="Select Host"
@@ -1293,7 +1365,7 @@ const NewEnquiryScreen = ({ navigation, route }) => {
                   iconBg={Colors.gold_icon_bg}
                   title="ESTIMATED AMOUNT"
                 >
-                  {/* ✅ FIXED — scrollRef pass kiya */}
+                  {/* FIXED — scrollRef pass kiya */}
                   <AmountInput
                     value={estAmount}
                     onChangeText={setEstAmount}
@@ -1571,7 +1643,7 @@ const dropSt = StyleSheet.create({
   itemBadge: { color: Colors.text_label, fontSize: F.f13, fontWeight: '500' },
 });
 
-// ✅ NEW — ModalDropdown styles
+// NEW — ModalDropdown styles
 const mdropSt = StyleSheet.create({
   trigger: {
     flexDirection: 'row',

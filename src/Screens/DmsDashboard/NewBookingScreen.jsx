@@ -710,7 +710,6 @@ const CustomDropdown = ({
 
 const NewBookingScreen = ({ navigation, route }) => {
   // ── Edit Mode Detection ───────────────────────────────────────────────────
-  // ReportsScreen se aayega: navigation.navigate('NewBookingScreen', { bookingId: 'DC6A...' })
   const editBookingId = route?.params?.bookingId || null;
   const isEditMode = !!editBookingId;
 
@@ -761,27 +760,24 @@ const NewBookingScreen = ({ navigation, route }) => {
     }
   }, [editBookingId]);
 
-  // API se data fetch karke form mein fill karo
   const prefillForm = async id => {
     try {
       setPrefilling(true);
       const result = await getSingleBooking(id);
 
       if (!result.success) {
-        Alert.alert('❌ Error', result.message || 'Booking data nahi mila');
+        Alert.alert('Error', result.message || 'Unable to load booking data.');
         return;
       }
 
       const d = result.data;
 
-      // ── Category match karo ───────────────────────────────────────────────
       const matchedCat =
         CATEGORIES.find(
           c => c.label.toLowerCase() === (d.Category || '').toLowerCase(),
         ) || null;
       setSelectedCat(matchedCat);
 
-      // ── Property match karo ───────────────────────────────────────────────
       if (matchedCat) {
         const propList = PROPERTIES[matchedCat.key] || [];
         const matchedProp =
@@ -791,12 +787,10 @@ const NewBookingScreen = ({ navigation, route }) => {
         setSelectedProp(matchedProp);
       }
 
-      // ── Customer fields ───────────────────────────────────────────────────
       setFullName(d.FullName || '');
       setMobile(d.MobileNumber || '');
       setEmail(d.EmailId || '');
 
-      // ── Booking fields ────────────────────────────────────────────────────
       setCheckIn(apiDateToDisplay(d.CheckInDate));
       setCheckOut(apiDateToDisplay(d.CheckOutDate));
       setGuests(String(d.NoOfGuest || ''));
@@ -805,9 +799,7 @@ const NewBookingScreen = ({ navigation, route }) => {
       setSpecialReq(d.SpecialRequest || '');
       setDealAmount(String(d.DealAmount || ''));
       setAdvanceAmount(String(d.AdvanceAmount || ''));
-      // balance auto calculate hoga useEffect se
 
-      // ── Dropdown fields — key se match karo ──────────────────────────────
       setHost(
         HOST_OPTIONS.find(
           h => h.label.toLowerCase() === (d.Host || '').toLowerCase(),
@@ -824,24 +816,21 @@ const NewBookingScreen = ({ navigation, route }) => {
         ) || null,
       );
     } catch (err) {
-      console.log('❌ prefillForm error:', err);
-      Alert.alert('Error', 'Form fill karte waqt error aaya');
+      console.log('prefillForm error:', err);
+      Alert.alert('Error', 'Something went wrong while loading the booking.');
     } finally {
       setPrefilling(false);
     }
   };
 
   // ── Date Helpers ──────────────────────────────────────────────────────────
-
-  // API format (2026-05-25) → Display format (25/05/2026)
   const apiDateToDisplay = apiDate => {
     if (!apiDate) return '';
-    const parts = apiDate.split('T')[0].split('-'); // handle ISO strings too
+    const parts = apiDate.split('T')[0].split('-');
     if (parts.length !== 3) return '';
     return `${parts[2]}/${parts[1]}/${parts[0]}`;
   };
 
-  // Display format (25/05/2026) → API format (2026-05-25)
   const formatDateForApi = date => {
     if (!date) return '';
     const parts = date.split('/');
@@ -883,15 +872,118 @@ const NewBookingScreen = ({ navigation, route }) => {
     setPropertyOpen(false);
   };
 
+  // ── Validation ─────────────────────────────────────────────────────────────
+  const validateForm = () => {
+    if (!selectedCat) {
+      Alert.alert('Validation Error', 'Please select a category.');
+      return false;
+    }
+    if (!selectedProp) {
+      Alert.alert('Validation Error', 'Please select a property.');
+      return false;
+    }
+    if (!fullName.trim()) {
+      Alert.alert('Validation Error', 'Please enter the guest full name.');
+      return false;
+    }
+    if (fullName.trim().length < 3) {
+      Alert.alert(
+        'Validation Error',
+        'Full name must be at least 3 characters long.',
+      );
+      return false;
+    }
+    if (!mobile.trim()) {
+      Alert.alert('Validation Error', 'Please enter a mobile number.');
+      return false;
+    }
+    if (!/^\d{10}$/.test(mobile.trim())) {
+      Alert.alert(
+        'Validation Error',
+        'Please enter a valid 10-digit mobile number.',
+      );
+      return false;
+    }
+    if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      Alert.alert('Validation Error', 'Please enter a valid email address.');
+      return false;
+    }
+    if (!host) {
+      Alert.alert('Validation Error', 'Please select a host.');
+      return false;
+    }
+    if (!bookingSource) {
+      Alert.alert('Validation Error', 'Please select a booking source.');
+      return false;
+    }
+    if (!checkIn) {
+      Alert.alert('Validation Error', 'Please select a check-in date.');
+      return false;
+    }
+    if (!checkOut) {
+      Alert.alert('Validation Error', 'Please select a check-out date.');
+      return false;
+    }
+    if (formatDateForApi(checkOut) <= formatDateForApi(checkIn)) {
+      Alert.alert(
+        'Validation Error',
+        'Check-out date must be after the check-in date.',
+      );
+      return false;
+    }
+    if (adults && (isNaN(Number(adults)) || Number(adults) < 0)) {
+      Alert.alert('Validation Error', 'Please enter a valid number of adults.');
+      return false;
+    }
+    if (children && (isNaN(Number(children)) || Number(children) < 0)) {
+      Alert.alert(
+        'Validation Error',
+        'Please enter a valid number of children.',
+      );
+      return false;
+    }
+    if (guests && (isNaN(Number(guests)) || Number(guests) <= 0)) {
+      Alert.alert(
+        'Validation Error',
+        'Please enter a valid number of guests.',
+      );
+      return false;
+    }
+    if (!receivedBy) {
+      Alert.alert(
+        'Validation Error',
+        'Please select who received the amount.',
+      );
+      return false;
+    }
+    if (!dealAmount.trim()) {
+      Alert.alert('Validation Error', 'Please enter the deal amount.');
+      return false;
+    }
+    if (isNaN(Number(dealAmount)) || Number(dealAmount) <= 0) {
+      Alert.alert('Validation Error', 'Please enter a valid deal amount.');
+      return false;
+    }
+    if (
+      advanceAmount &&
+      (isNaN(Number(advanceAmount)) || Number(advanceAmount) < 0)
+    ) {
+      Alert.alert('Validation Error', 'Please enter a valid advance amount.');
+      return false;
+    }
+    if (Number(advanceAmount || 0) > Number(dealAmount || 0)) {
+      Alert.alert(
+        'Validation Error',
+        'Advance amount cannot be greater than the deal amount.',
+      );
+      return false;
+    }
+    return true;
+  };
+
   // ── Submit (Insert OR Update) ─────────────────────────────────────────────
   const handleSubmit = async () => {
-    if (!fullName.trim() || !mobile.trim()) {
-      Alert.alert(
-        '⚠️ Validation Error',
-        'Full Name aur Mobile Number required hai!',
-      );
-      return;
-    }
+    if (!validateForm()) return;
 
     try {
       setLoading(true);
@@ -920,22 +1012,20 @@ const NewBookingScreen = ({ navigation, route }) => {
       let result;
 
       if (isEditMode) {
-        // ── UPDATE MODE ───────────────────────────────────────────────────
         result = await updateBooking({
           ...bookingData,
-          Id: editBookingId, // ✅ GUID must for update
+          Id: editBookingId,
         });
       } else {
-        // ── INSERT MODE ───────────────────────────────────────────────────
         result = await insertNewBooking(bookingData);
       }
 
       if (result.success) {
         Alert.alert(
-          isEditMode ? '✅ Updated!' : '✅ Booking Successful',
+          isEditMode ? 'Updated' : 'Booking Successful',
           isEditMode
-            ? 'Booking successfully update ho gayi!'
-            : 'Booking successfully add ho gayi!',
+            ? 'The booking was updated successfully.'
+            : 'The booking was created successfully.',
           [
             {
               text: 'View Records',
@@ -951,13 +1041,13 @@ const NewBookingScreen = ({ navigation, route }) => {
         );
       } else {
         Alert.alert(
-          '❌ Error',
-          result.message || 'Kuch galat hua, dobara try karo.',
+          'Error',
+          result.message || 'Something went wrong. Please try again.',
         );
       }
     } catch (error) {
-      console.log('❌ Submit Error:', error);
-      Alert.alert('Error', 'Something went wrong');
+      console.log('Submit Error:', error);
+      Alert.alert('Error', 'Something went wrong. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -1012,7 +1102,6 @@ const NewBookingScreen = ({ navigation, route }) => {
             {isEditMode ? 'Update booking details' : 'Fill in booking details'}
           </Text>
         </View>
-        {/* Edit mode badge */}
         {isEditMode && (
           <View style={screenSt.editBadge}>
             <Text style={screenSt.editBadgeText}>EDIT</Text>
@@ -1147,6 +1236,26 @@ const NewBookingScreen = ({ navigation, route }) => {
                   onRightChange={setCheckOut}
                   availability={activeAvailability}
                 />
+                <View style={{ flexDirection: 'row', gap: 10 }}>
+                  <View style={{ flex: 1 }}>
+                    <FieldLabel text="ADULTS" />
+                    <FormInput
+                      placeholder="Adults"
+                      value={adults}
+                      onChangeText={setAdults}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <FieldLabel text="CHILDREN" />
+                    <FormInput
+                      placeholder="Children"
+                      value={children}
+                      onChangeText={setChildren}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                </View>
                 <View>
                   <FieldLabel text="NO. OF GUESTS" />
                   <FormInput
@@ -1404,7 +1513,6 @@ const screenSt = StyleSheet.create({
   },
   headerSubtitle: { color: Colors.text_grey, fontSize: F.f13 },
 
-  // ── Edit mode badge ──────────────────────────────────────────────────────
   editBadge: {
     backgroundColor: Colors.primary,
     borderRadius: 8,
@@ -1439,7 +1547,6 @@ const screenSt = StyleSheet.create({
     backgroundColor: Colors.primary,
   },
 
-  // ── Pre-fill loader banner ───────────────────────────────────────────────
   prefillingBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1465,7 +1572,6 @@ const screenSt = StyleSheet.create({
     marginTop: 6,
     gap: 10,
   },
-  // ── Update button — amber color ──────────────────────────────────────────
   submitBtnEdit: { backgroundColor: '#D97706' },
   submitCheckIcon: { width: 22, height: 22, tintColor: Colors.primary },
   submitText: {

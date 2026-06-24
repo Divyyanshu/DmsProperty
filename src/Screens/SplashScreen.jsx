@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef } from 'react';
 import {
   View,
@@ -52,11 +51,14 @@ function Ring({ size, opacity, top, left, delay }) {
           easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
-      ])
+      ]),
     ).start();
   }, []);
 
-  const scale = anim.interpolate({ inputRange: [0, 1], outputRange: [0.95, 1.05] });
+  const scale = anim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.95, 1.05],
+  });
 
   return (
     <Animated.View
@@ -79,16 +81,16 @@ function Ring({ size, opacity, top, left, delay }) {
 /* ─── Main Component ─────────────────────────────────────────────────────── */
 export default function SplashScreen({ navigation }) {
   // Animation values
-  const logoOpacity   = useRef(new Animated.Value(0)).current;
-  const logoScale     = useRef(new Animated.Value(0.6)).current;
-  const brandOpacity  = useRef(new Animated.Value(0)).current;
-  const brandY        = useRef(new Animated.Value(24)).current;
+  const logoOpacity = useRef(new Animated.Value(0)).current;
+  const logoScale = useRef(new Animated.Value(0.6)).current;
+  const brandOpacity = useRef(new Animated.Value(0)).current;
+  const brandY = useRef(new Animated.Value(24)).current;
   const taglineOpacity = useRef(new Animated.Value(0)).current;
-  const taglineY      = useRef(new Animated.Value(20)).current;
-  const barWidth      = useRef(new Animated.Value(0)).current;
+  const taglineY = useRef(new Animated.Value(20)).current;
+  const barWidth = useRef(new Animated.Value(0)).current;
   const screenOpacity = useRef(new Animated.Value(1)).current;
 
-useEffect(() => {
+  useEffect(() => {
     Animated.sequence([
       Animated.parallel([
         Animated.timing(logoOpacity, {
@@ -163,26 +165,41 @@ useEffect(() => {
 
   return (
     <Animated.View style={[styles.root, { opacity: screenOpacity }]}>
-      <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
+      <StatusBar
+        translucent
+        backgroundColor="transparent"
+        barStyle="light-content"
+      />
+      <Ring size={320} opacity={0.06} top={-80} left={-100} delay={0} />
+      <Ring
+        size={260}
+        opacity={0.08}
+        top={height * 0.5}
+        left={width - 160}
+        delay={500}
+      />
+      <Ring
+        size={200}
+        opacity={0.05}
+        top={height * 0.7}
+        left={-60}
+        delay={1000}
+      />
+      <Ring
+        size={180}
+        opacity={0.07}
+        top={-40}
+        left={width - 100}
+        delay={200}
+      />
 
-      {/* ── Decorative rings ──────────────────────────────────────────── */}
-      <Ring size={320} opacity={0.06} top={-80}        left={-100}       delay={0}    />
-      <Ring size={260} opacity={0.08} top={height*0.5} left={width-160}  delay={500}  />
-      <Ring size={200} opacity={0.05} top={height*0.7} left={-60}        delay={1000} />
-      <Ring size={180} opacity={0.07} top={-40}        left={width-100}  delay={200}  />
-
-      {/* ── Gold accent bar top-left ───────────────────────────────────── */}
-      
-
-     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-                    <StatusBar
-                      backgroundColor={Colors.bg_dark}
-                      barStyle="light-content"
-                      translucent={false}
-                    />
-        {/* ── Center content ────────────────────────────────────────────── */}
+      <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+        <StatusBar
+          backgroundColor={Colors.bg_dark}
+          barStyle="light-content"
+          translucent={false}
+        />
         <View style={styles.centerBlock}>
-          {/* Logo icon */}
           <Animated.View
             style={{
               opacity: logoOpacity,
@@ -206,7 +223,6 @@ useEffect(() => {
             <Text style={styles.brandSub}>ENTERPRISE PLATFORM</Text>
           </Animated.View>
 
-          {/* Divider */}
           <View style={styles.dividerRow}>
             <View style={styles.dividerLine} />
             <View style={styles.dividerDot} />
@@ -217,14 +233,15 @@ useEffect(() => {
           <Animated.Text
             style={[
               styles.tagline,
-              { opacity: taglineOpacity, transform: [{ translateY: taglineY }] },
+              {
+                opacity: taglineOpacity,
+                transform: [{ translateY: taglineY }],
+              },
             ]}
           >
             Unified Data,{' '}
             <Text style={styles.taglineAccent}>Smarter Decisions</Text>
           </Animated.Text>
-
-          
         </View>
 
         {/* ── Bottom progress ───────────────────────────────────────────── */}
@@ -242,7 +259,9 @@ useEffect(() => {
               <Text style={styles.badgeText}>256-bit SSL</Text>
             </View>
             <View style={styles.badge}>
-              <View style={[styles.badgeDot, { backgroundColor: Colors.primary }]} />
+              <View
+                style={[styles.badgeDot, { backgroundColor: Colors.primary }]}
+              />
               <Text style={styles.badgeText}>End-to-end Encrypted</Text>
             </View>
             <View style={styles.badge}>
@@ -269,8 +288,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
 
- 
- 
   ring: {
     position: 'absolute',
     borderWidth: 1.5,

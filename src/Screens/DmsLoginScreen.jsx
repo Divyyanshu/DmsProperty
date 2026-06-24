@@ -219,8 +219,6 @@ const DmsLoginScreen = ({ navigation }) => {
         );
         return;
       }
-
-      // Check login attempts
       if (loginAttempts >= 5) {
         setGlobalWarning(
           'Too many login attempts. Please try again in 30 minutes.',
@@ -243,6 +241,7 @@ const DmsLoginScreen = ({ navigation }) => {
         );
         return;
       }
+
       setBtnState(BTN_LOADING);
       showLoaderAnimation();
       const trimmedUsername = username.trim();
@@ -250,45 +249,34 @@ const DmsLoginScreen = ({ navigation }) => {
       const result = await loginUser(trimmedUsername, trimmedPassword);
 
       if (result && result.success) {
+        // ✅ SUCCESS - Direct login without any validation/alert
         setBtnState(BTN_SUCCESS);
         setLoginAttempts(0);
         setUsernameError('');
         setPasswordError('');
         setGlobalError('');
 
-        Alert.alert(
-          'Login Successful',
-          `Welcome back, ${trimmedUsername}!\nRedirecting to your dashboard...`,
-          [
-            {
-              text: 'Continue',
-              onPress: () => {
-                setBtnState(BTN_IDLE);
-                navigation.replace('DashboardScreen');
-              },
-              style: 'default',
-            },
-          ],
-          { cancelable: false },
-        );
+        // Direct navigation without alert
+        setTimeout(() => {
+          navigation.replace('DashboardScreen');
+        }, 500); // Small delay for UX
       } else {
-        // Failed login
+        //  FAILED LOGIN - Show proper error message
         setBtnState(BTN_ERROR);
         const newAttempts = loginAttempts + 1;
         setLoginAttempts(newAttempts);
         const remainingAttempts = 5 - newAttempts;
 
+        // Custom error message for wrong credentials
         const errorMessage =
-          result?.message ||
-          'Invalid credentials. Please check your username and password.';
-
+          'Wrong credentials please enter valid username password';
         setGlobalError(errorMessage);
 
         // Different alert messages based on remaining attempts
         if (remainingAttempts <= 2) {
           Alert.alert(
-            '❌ Login Failed',
-            `${errorMessage}\n\n⚠️ Warning: ${remainingAttempts} attempt(s) remaining before account lock.`,
+            'Login Failed',
+            `${errorMessage}\n\n Warning: ${remainingAttempts} attempt(s) remaining before account lock.`,
             [
               {
                 text: 'Try Again',
@@ -316,7 +304,7 @@ const DmsLoginScreen = ({ navigation }) => {
           );
         } else {
           Alert.alert(
-            '❌ Login Failed',
+            ' Login Failed',
             errorMessage,
             [
               {
@@ -337,12 +325,11 @@ const DmsLoginScreen = ({ navigation }) => {
         }
       }
     } catch (error) {
-      // Handle unexpected errors
       setBtnState(BTN_ERROR);
       setGlobalError('An unexpected error occurred. Please try again.');
 
       Alert.alert(
-        '⚠️ Error',
+        ' Error',
         'An unexpected error occurred. Please check your connection and try again.',
         [
           {
@@ -437,8 +424,6 @@ const DmsLoginScreen = ({ navigation }) => {
                 <Text style={styles.warningBannerMsg}>{globalWarning}</Text>
               </View>
             ) : null}
-
-            {/* ── LOGIN ATTEMPTS INFO ───────────────────────────── */}
             {loginAttempts > 0 && loginAttempts < 5 ? (
               <View style={styles.infoBox}>
                 <Text style={styles.infoText}>
@@ -446,8 +431,6 @@ const DmsLoginScreen = ({ navigation }) => {
                 </Text>
               </View>
             ) : null}
-
-            {/* ── USERNAME INPUT ────────────────────────────────── */}
             <Text style={styles.fieldLabel}>USERNAME</Text>
             <View
               style={[
