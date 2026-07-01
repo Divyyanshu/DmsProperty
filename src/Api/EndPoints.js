@@ -19,17 +19,12 @@ export const ENDPOINTS = {BASE_URL,
 
   UPDATE_BOOKING:     `${BASE_URL}/NewBooking/Update_NewBooking`,
     
-  DELETE_BOOKING: `${BASE_URL}/NewBooking/Delete_NewBooking`,  // ✅
-
-  // subscription record (revenue screen) APIs
+  DELETE_BOOKING: `${BASE_URL}/NewBooking/Delete_NewBooking`,
 
   GET_TOTAL_REVENUE: `${BASE_URL}/NewBooking/TotalRevelue`,
 
   GET_REVENUE_DETAILS:`${BASE_URL}/NewBooking/GetDataRevelue`,
 
-  // New Enquiry APIs
-
-  // New Enquiry APIs
 INSERT_ENQUIRY:      `${BASE_URL}/Enquiry/Insert_Enquiry`,
 UPDATE_ENQUIRY:      `${BASE_URL}/Enquiry/Update_Enquiry`,
 GET_ENQUIRIES:       `${BASE_URL}/Enquiry/GetDataEnquiry`,

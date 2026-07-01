@@ -2,10 +2,6 @@ import AxiosClient from "./AxoisClient";
 import { ENDPOINTS } from "./EndPoints";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-// ======================================================
-// LOGIN
-// ======================================================
-
 export const loginUser = async (username, password) => {
   try {
     const response = await AxiosClient.post(ENDPOINTS.LOGIN, {
@@ -35,26 +31,18 @@ export const loginUser = async (username, password) => {
   }
 };
 
-// ======================================================
-// LOGOUT
-// ======================================================
 
 export const logoutUser = async () => {
   await AsyncStorage.removeItem("token");
   await AsyncStorage.removeItem("userData");
 };
 
-// ======================================================
-// GET STORED TOKEN
-// ======================================================
 
 export const getStoredToken = async () => {
   return await AsyncStorage.getItem("token");
 };
 
-// ======================================================
-// DASHBOARD
-// ======================================================
+
 
 export const getDashboardTotals = async (
   filterType = "Today",
@@ -95,9 +83,6 @@ export const getDashboardTotals = async (
   }
 };
 
-// ======================================================
-// INSERT BOOKING
-// ======================================================
 
 export const insertNewBooking = async (bookingData) => {
   try {
@@ -117,10 +102,6 @@ export const insertNewBooking = async (bookingData) => {
     };
   }
 };
-
-// ======================================================
-// GET BOOKINGS
-// ======================================================
 
 export const getNewBookings = async () => {
   try {
@@ -189,9 +170,6 @@ export const getNewBookings = async () => {
   }
 };
 
-// ======================================================
-// GET SINGLE BOOKING
-// ======================================================
 
 export const getSingleBooking = async (id) => {
   try {
@@ -203,7 +181,7 @@ export const getSingleBooking = async (id) => {
     );
 
     console.log(
-      "✅ GET SINGLE BOOKING RESPONSE =>",
+      "GET SINGLE BOOKING RESPONSE =>",
       JSON.stringify(response.data, null, 2)
     );
 
@@ -224,7 +202,7 @@ export const getSingleBooking = async (id) => {
 
   } catch (error) {
     console.log(
-      "❌ GET SINGLE BOOKING ERROR =>",
+      "GET SINGLE BOOKING ERROR =>",
       JSON.stringify(error.response?.data, null, 2)
     );
     return {
@@ -237,9 +215,6 @@ export const getSingleBooking = async (id) => {
   }
 };
 
-// ======================================================
-// UPDATE BOOKING
-// ======================================================
 
 export const updateBooking = async (bookingData) => {
   try {
@@ -254,7 +229,7 @@ export const updateBooking = async (bookingData) => {
     );
 
     console.log(
-      "✅ UPDATE BOOKING RESPONSE =>",
+      "UPDATE BOOKING RESPONSE =>",
       JSON.stringify(response.data, null, 2)
     );
 
@@ -262,7 +237,7 @@ export const updateBooking = async (bookingData) => {
 
   } catch (error) {
     console.log(
-      "❌ UPDATE BOOKING ERROR =>",
+      "UPDATE BOOKING ERROR =>",
       JSON.stringify(error.response?.data, null, 2)
     );
     return {
@@ -275,10 +250,6 @@ export const updateBooking = async (bookingData) => {
   }
 };
 
-// ======================================================
-// DELETE BOOKING
-// ======================================================
-
 export const deleteBooking = async (id) => {
   try {
     console.log("📦 DELETE BOOKING => Id:", id);
@@ -289,7 +260,7 @@ export const deleteBooking = async (id) => {
     );
 
     console.log(
-      "✅ DELETE BOOKING RESPONSE =>",
+      "DELETE BOOKING RESPONSE =>",
       JSON.stringify(response.data, null, 2)
     );
 
@@ -297,7 +268,7 @@ export const deleteBooking = async (id) => {
 
   } catch (error) {
     console.log(
-      "❌ DELETE BOOKING ERROR =>",
+      "DELETE BOOKING ERROR =>",
       JSON.stringify(error.response?.data, null, 2)
     );
     return {
@@ -333,10 +304,6 @@ export const insertEnquiry = async (enquiryData) => {
   }
 };
 
-// ======================================================
-// GET ENQUIRIES
-// ======================================================
-
 export const getEnquiries = async (
   filterType = "",
   fromDate = "",
@@ -360,7 +327,7 @@ export const getEnquiries = async (
     );
 
     console.log(
-      "✅ GET ENQUIRIES RESPONSE =>",
+      "GET ENQUIRIES RESPONSE =>",
       JSON.stringify(response.data, null, 2)
     );
 
@@ -392,9 +359,6 @@ export const getEnquiries = async (
       estimatedAmount: item.EstimatedAmount || 0,
       checkInDate:     item.CheckInDate     || "",
       checkOutDate:    item.CheckOutDate    || "",
-
-      // ✅ Raw fields bhi rakho — getSingleEnquiry ke baad
-      // updateEnquiryStatus inhe use karta hai
       FullName:        item.FullName        || "",
       Category:        item.Category        || "",
       PropertyName:    item.PropertyName    || "",
@@ -408,7 +372,7 @@ export const getEnquiries = async (
     }));
 
     console.log(
-      "✅ FINAL ENQUIRIES =>",
+      "FINAL ENQUIRIES =>",
       JSON.stringify(formattedData, null, 2)
     );
 
@@ -416,7 +380,7 @@ export const getEnquiries = async (
 
   } catch (error) {
     console.log(
-      "❌ GET ENQUIRIES ERROR =>",
+      "GET ENQUIRIES ERROR =>",
       JSON.stringify(error.response?.data, null, 2)
     );
     return {
@@ -429,10 +393,6 @@ export const getEnquiries = async (
   }
 };
 
-// ======================================================
-// GET SINGLE ENQUIRY  ✅
-// ======================================================
-
 export const getSingleEnquiry = async (id) => {
   try {
     console.log("📦 GET SINGLE ENQUIRY => Id:", id);
@@ -443,7 +403,7 @@ export const getSingleEnquiry = async (id) => {
     );
 
     console.log(
-      "✅ GET SINGLE ENQUIRY RESPONSE =>",
+      "GET SINGLE ENQUIRY RESPONSE =>",
       JSON.stringify(response.data, null, 2)
     );
 
@@ -464,7 +424,7 @@ export const getSingleEnquiry = async (id) => {
 
   } catch (error) {
     console.log(
-      "❌ GET SINGLE ENQUIRY ERROR =>",
+      "GET SINGLE ENQUIRY ERROR =>",
       JSON.stringify(error.response?.data, null, 2)
     );
     return {
@@ -522,17 +482,10 @@ export const convertEnquiryToBooking = async (enquiryItem) => {
   }
 };
 
-// ======================================================
-// UPDATE ENQUIRY STATUS  ✅
-// Pehle single enquiry fetch karta hai, phir poora data
-// update karta hai sirf status change karke
-// ======================================================
 
 export const updateEnquiryStatus = async (id, status) => {
   try {
     console.log("📦 UPDATE ENQUIRY STATUS => Id:", id, "Status:", status);
-
-    // Step 1: Pehle poora enquiry data fetch karo
     const single = await getSingleEnquiry(id);
 
     if (!single.success) {
@@ -555,12 +508,12 @@ export const updateEnquiryStatus = async (id, status) => {
         CheckOutDate:    e.CheckOutDate    || "",
         NoOfGuest:       e.NoOfGuest       || "",
         EstimatedAmount: e.EstimatedAmount || "",
-        EnquiryStatus:   status,            // ✅ sirf ye change hoga
+        EnquiryStatus:   status,            // sirf ye change hoga
       }
     );
 
     console.log(
-      "✅ UPDATE ENQUIRY STATUS RESPONSE =>",
+      "UPDATE ENQUIRY STATUS RESPONSE =>",
       JSON.stringify(response.data, null, 2)
     );
 
@@ -568,7 +521,7 @@ export const updateEnquiryStatus = async (id, status) => {
 
   } catch (error) {
     console.log(
-      "❌ UPDATE ENQUIRY STATUS ERROR =>",
+      "UPDATE ENQUIRY STATUS ERROR =>",
       JSON.stringify(error.response?.data, null, 2)
     );
     return {
@@ -595,7 +548,7 @@ export const deleteEnquiry = async (id) => {
     );
 
     console.log(
-      "✅ DELETE ENQUIRY RESPONSE =>",
+      "DELETE ENQUIRY RESPONSE =>",
       JSON.stringify(response.data, null, 2)
     );
 
@@ -603,7 +556,7 @@ export const deleteEnquiry = async (id) => {
 
   } catch (error) {
     console.log(
-      "❌ DELETE ENQUIRY ERROR =>",
+      "DELETE ENQUIRY ERROR =>",
       JSON.stringify(error.response?.data, null, 2)
     );
     return {
@@ -754,7 +707,7 @@ export const getRevenueDetails = async (
     );
 
     console.log(
-      "✅ GET REVENUE DETAILS RAW RESPONSE =>",
+      "GET REVENUE DETAILS RAW RESPONSE =>",
       JSON.stringify(response.data, null, 2)
     );
 
@@ -782,7 +735,7 @@ export const getRevenueDetails = async (
 
   } catch (error) {
     console.log(
-      "❌ GET REVENUE DETAILS ERROR =>",
+      "GET REVENUE DETAILS ERROR =>",
       JSON.stringify(error.response?.data, null, 2)
     );
     return {
@@ -811,7 +764,7 @@ export const updateEnquiry = async (enquiryData) => {
     );
 
     console.log(
-      "✅ UPDATE ENQUIRY RESPONSE =>",
+      "UPDATE ENQUIRY RESPONSE =>",
       JSON.stringify(response.data, null, 2)
     );
 
@@ -819,7 +772,7 @@ export const updateEnquiry = async (enquiryData) => {
 
   } catch (error) {
     console.log(
-      "❌ UPDATE ENQUIRY ERROR =>",
+      "UPDATE ENQUIRY ERROR =>",
       JSON.stringify(error.response?.data, null, 2)
     );
     return {

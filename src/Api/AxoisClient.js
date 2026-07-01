@@ -1,10 +1,6 @@
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-// ─────────────────────────────────────────────────────────────
-// AXIOS CLIENT
-// ─────────────────────────────────────────────────────────────
-
 const AxiosClient = axios.create({
 
   timeout: 30000,
@@ -14,46 +10,39 @@ const AxiosClient = axios.create({
   },
 });
 
-// ─────────────────────────────────────────────────────────────
-// REQUEST INTERCEPTOR
-// Har request se pehle token automatically lagayega
-// ─────────────────────────────────────────────────────────────
 
 AxiosClient.interceptors.request.use(
 
   async (config) => {
 
     try {
-
-      // TOKEN STORAGE SE LO
       const token = await AsyncStorage.getItem("token");
 
       console.log(
-        "🔑 TOKEN FROM STORAGE =>",
+        "TOKEN FROM STORAGE =>",
         token
       );
 
-      // AGAR TOKEN HAI TO HEADER ME LAGAO
       if (token) {
 
         config.headers.Authorization =
           `Bearer ${token}`;
 
         console.log(
-          "✅ AUTH HEADER =>",
+          "AUTH HEADER =>",
           config.headers.Authorization
         );
 
       } else {
 
         console.log(
-          "⚠️ NO TOKEN FOUND"
+          "NO TOKEN FOUND"
         );
       }
 
       // FINAL REQUEST DEBUG
       console.log(
-        "📤 API REQUEST =>",
+        "API REQUEST =>",
         {
           url: config.url,
           method: config.method,
@@ -67,7 +56,7 @@ AxiosClient.interceptors.request.use(
     } catch (error) {
 
       console.log(
-        "❌ REQUEST INTERCEPTOR ERROR =>",
+        "REQUEST INTERCEPTOR ERROR =>",
         error
       );
 
@@ -78,7 +67,7 @@ AxiosClient.interceptors.request.use(
   (error) => {
 
     console.log(
-      "❌ REQUEST ERROR =>",
+      "REQUEST ERROR =>",
       error
     );
 
@@ -95,7 +84,7 @@ AxiosClient.interceptors.response.use(
   (response) => {
 
     console.log(
-      "✅ API RESPONSE =>",
+      "API RESPONSE =>",
       {
         url: response.config.url,
         status: response.status,
@@ -109,7 +98,7 @@ AxiosClient.interceptors.response.use(
   async (error) => {
 
     console.log(
-      "❌ API ERROR =>",
+      "API ERROR =>",
       {
         url: error.config?.url,
         status: error.response?.status,
@@ -117,14 +106,11 @@ AxiosClient.interceptors.response.use(
       }
     );
 
-    // ─────────────────────────────────────────────────────────
-    // TOKEN EXPIRE / UNAUTHORIZED
-    // ─────────────────────────────────────────────────────────
 
     if (error.response?.status === 401) {
 
       console.log(
-        "⛔ TOKEN EXPIRED / UNAUTHORIZED"
+        "TOKEN EXPIRED / UNAUTHORIZED"
       );
 
       // TOKEN REMOVE

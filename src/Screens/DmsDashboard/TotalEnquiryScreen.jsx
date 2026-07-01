@@ -61,20 +61,12 @@ const F = {
   f20: 20,
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 2. PERIOD OPTIONS
-// ─────────────────────────────────────────────────────────────────────────────
-
 const PERIOD_OPTIONS = [
   { key: 'Today', label: 'Today' },
   { key: 'Yesterday', label: 'Yesterday' },
   { key: 'monthly', label: 'Monthly' },
   { key: 'yearly', label: 'Yearly' },
 ];
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 3. HELPERS
-// ─────────────────────────────────────────────────────────────────────────────
 
 const safeStr = val => (val != null ? String(val) : '');
 
@@ -241,11 +233,6 @@ const PeriodDropdown = ({ selected, onSelect }) => {
     </>
   );
 };
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 5. PROGRESS BAR
-// ─────────────────────────────────────────────────────────────────────────────
-
 const ProgressBar = ({ progress }) => (
   <View style={styles.progTrack}>
     <View
@@ -256,10 +243,6 @@ const ProgressBar = ({ progress }) => (
     />
   </View>
 );
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 6. SKELETON
-// ─────────────────────────────────────────────────────────────────────────────
 
 const SkeletonBox = ({ w, h, radius = 6 }) => (
   <View
@@ -308,10 +291,6 @@ const LoadingSkeleton = () => (
   </View>
 );
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 7. STATUS BADGE
-// ─────────────────────────────────────────────────────────────────────────────
-
 const StatusBadge = ({ label, bg, border, color }) => (
   <View
     style={[styles.statusBadge, { backgroundColor: bg, borderColor: border }]}
@@ -343,19 +322,19 @@ const PropertyEnquiryRow = ({ prop }) => (
       <ProgressBar progress={prop.progress} />
       <View style={styles.propStatusRow}>
         <StatusBadge
-          label={`🆕 ${prop.new} New`}
+          label={`${prop.new} New`}
           bg={Colors.warn_bg}
           border={Colors.warn_border}
           color={Colors.warn_text}
         />
         <StatusBadge
-          label={`⏳ ${prop.pending} Pending`}
+          label={`${prop.pending} Pending`}
           bg={Colors.danger_bg}
           border={Colors.danger_border}
           color={Colors.danger_text}
         />
         <StatusBadge
-          label={`✅ ${prop.converted} Converted`}
+          label={`${prop.converted} Converted`}
           bg={Colors.success_bg}
           border={Colors.success_border}
           color={Colors.success_text}
@@ -364,10 +343,6 @@ const PropertyEnquiryRow = ({ prop }) => (
     </View>
   </View>
 );
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 9. ENQUIRY SECTION CARD — same as Revenue/Expenses ExpenseSectionCard
-// ─────────────────────────────────────────────────────────────────────────────
 
 const EnquirySectionCard = ({
   title,
@@ -407,18 +382,12 @@ const EnquirySectionCard = ({
   </View>
 );
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 10. MAIN SCREEN
-// ─────────────────────────────────────────────────────────────────────────────
-
 const TotalEnquiryScreen = ({ navigation }) => {
   const [period, setPeriod] = useState('monthly');
   const [search, setSearch] = useState('');
   const [enquiries, setEnquiries] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-
-  // ── Fetch ──────────────────────────────────────────────────────────────────
 
   const fetchEnquiries = useCallback(async () => {
     try {
@@ -455,7 +424,6 @@ const TotalEnquiryScreen = ({ navigation }) => {
     return unsub;
   }, [navigation, fetchEnquiries]);
 
-  // ── Filter by period ───────────────────────────────────────────────────────
 
   const filteredEnquiries = enquiries.filter(item => {
     const dateStr =
@@ -487,8 +455,6 @@ const TotalEnquiryScreen = ({ navigation }) => {
     return true;
   });
 
-  // ── Search filter ──────────────────────────────────────────────────────────
-
   const searchedEnquiries = !search.trim()
     ? filteredEnquiries
     : filteredEnquiries.filter(
@@ -499,15 +465,11 @@ const TotalEnquiryScreen = ({ navigation }) => {
             .includes(search.toLowerCase()),
       );
 
-  // ── Stats ──────────────────────────────────────────────────────────────────
-
   const total = enquiries.length;
   const pending = enquiries.filter(i => getStatus(i) === 'pending').length;
   const converted = enquiries.filter(i => getStatus(i) === 'converted').length;
   const convRate =
     total > 0 ? `${Math.round((converted / total) * 100)}%` : '0%';
-
-  // ── Build category breakdowns ──────────────────────────────────────────────
 
   const buildCategory = categoryName => {
     const filtered = searchedEnquiries.filter(
@@ -518,11 +480,9 @@ const TotalEnquiryScreen = ({ navigation }) => {
     return buildBreakdown(filtered);
   };
 
-  // Also build from PropertyName for those without Category
   const farmProps = buildCategory('farmhouse');
   const airbnbProps = buildCategory('airbnb');
 
-  // Fallback: if no category, group all by property
   const allProps = buildBreakdown(searchedEnquiries);
 
   const showFarm = farmProps.length > 0;
@@ -536,8 +496,6 @@ const TotalEnquiryScreen = ({ navigation }) => {
     i => (i.Category ?? i.category ?? '').toLowerCase() === 'airbnb',
   ).length;
 
-  // ── Render ────────────────────────────────────────────────────────────────
-
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
       <StatusBar
@@ -546,7 +504,6 @@ const TotalEnquiryScreen = ({ navigation }) => {
         translucent={false}
       />
 
-      {/* ── HEADER ─────────────────────────────────────────────────────────── */}
       <View style={styles.header}>
         <View style={styles.circle1} />
         <View style={styles.circle2} />
@@ -686,7 +643,6 @@ const TotalEnquiryScreen = ({ navigation }) => {
           </View>
         )}
 
-        {/* Farmhouse card */}
         {!loading && !error && showFarm && (
           <EnquirySectionCard
             title="Farmhouse"

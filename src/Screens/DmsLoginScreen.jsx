@@ -79,7 +79,6 @@ const CommonHeights = {
   height56: 56,
 };
 
-// ─── Widths ───────────────────────────────────────────────────────────────────
 const CommonWidths = {
   width8: 8,
   width10: 10,
@@ -92,13 +91,11 @@ const CommonWidths = {
   width40: 40,
 };
 
-// ─── Button States ────────────────────────────────────────────────────────
 const BTN_IDLE = 'idle';
 const BTN_LOADING = 'loading';
 const BTN_SUCCESS = 'success';
 const BTN_ERROR = 'error';
 
-// ─── Validation Functions ─────────────────────────────────────────────────
 const validateUsername = value => {
   if (!value || value.trim().length === 0) {
     return 'Username is required';
@@ -122,9 +119,7 @@ const validatePassword = value => {
   return null;
 };
 
-// ─── Main Login Screen Component ───────────────────────────────────────────
 const DmsLoginScreen = ({ navigation }) => {
-  // ── State Management ──────────────────────────────────────────────────
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -138,7 +133,6 @@ const DmsLoginScreen = ({ navigation }) => {
   const [loginAttempts, setLoginAttempts] = useState(0);
   const loaderOpacity = useRef(new Animated.Value(0)).current;
 
-  // ── Computed State ───────────────────────────────────────────────────
   const isLoading = btnState === BTN_LOADING;
   const isSuccess = btnState === BTN_SUCCESS;
   const isError = btnState === BTN_ERROR;
@@ -198,11 +192,8 @@ const DmsLoginScreen = ({ navigation }) => {
 
   const handleSignIn = async () => {
     try {
-      // Reset previous errors
       setGlobalError('');
       setGlobalWarning('');
-
-      // Validate inputs
       const uErr = validateUsername(username);
       const pErr = validatePassword(password);
 
@@ -212,7 +203,7 @@ const DmsLoginScreen = ({ navigation }) => {
       if (uErr || pErr) {
         const errorMessage = uErr || pErr;
         Alert.alert(
-          '⚠️ Validation Error',
+          'Validation Error',
           errorMessage,
           [{ text: 'OK', style: 'default' }],
           { cancelable: true },
@@ -249,30 +240,24 @@ const DmsLoginScreen = ({ navigation }) => {
       const result = await loginUser(trimmedUsername, trimmedPassword);
 
       if (result && result.success) {
-        // ✅ SUCCESS - Direct login without any validation/alert
         setBtnState(BTN_SUCCESS);
         setLoginAttempts(0);
         setUsernameError('');
         setPasswordError('');
         setGlobalError('');
-
-        // Direct navigation without alert
         setTimeout(() => {
           navigation.replace('DashboardScreen');
-        }, 500); // Small delay for UX
+        }, 500);
       } else {
-        //  FAILED LOGIN - Show proper error message
         setBtnState(BTN_ERROR);
         const newAttempts = loginAttempts + 1;
         setLoginAttempts(newAttempts);
         const remainingAttempts = 5 - newAttempts;
 
-        // Custom error message for wrong credentials
         const errorMessage =
           'Wrong credentials please enter valid username password';
         setGlobalError(errorMessage);
 
-        // Different alert messages based on remaining attempts
         if (remainingAttempts <= 2) {
           Alert.alert(
             'Login Failed',
@@ -350,9 +335,6 @@ const DmsLoginScreen = ({ navigation }) => {
       console.error('Login error:', error);
     }
   };
-
-  // ── Render ────────────────────────────────────────────────────────────
-
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
       <StatusBar
@@ -395,17 +377,12 @@ const DmsLoginScreen = ({ navigation }) => {
               </View>
             </View>
           </View>
-
-          {/* ── FORM CARD ────────────────────────────────────────── */}
           <View style={styles.formCard}>
             <View style={styles.pill} />
-
             <Text style={styles.welcomeTitle}>Welcome back</Text>
             <Text style={styles.welcomeSubtitle}>
               Sign in to access your dashboard
             </Text>
-
-            {/* ── ERROR BANNER ──────────────────────────────────── */}
             {globalError ? (
               <View style={styles.errorBanner}>
                 <View style={styles.errorBannerDot}>
@@ -414,12 +391,10 @@ const DmsLoginScreen = ({ navigation }) => {
                 <Text style={styles.errorBannerMsg}>{globalError}</Text>
               </View>
             ) : null}
-
-            {/* ── WARNING BANNER ────────────────────────────────── */}
             {globalWarning ? (
               <View style={styles.warningBanner}>
                 <View style={styles.warningBannerDot}>
-                  <Text style={styles.warningBannerDotText}>⚠️</Text>
+                  <Text style={styles.warningBannerDotText}></Text>
                 </View>
                 <Text style={styles.warningBannerMsg}>{globalWarning}</Text>
               </View>
@@ -535,7 +510,6 @@ const DmsLoginScreen = ({ navigation }) => {
               <Text style={styles.errorText}>{passwordError}</Text>
             ) : null}
 
-            {/* ── FORGOT PASSWORD LINK ──────────────────────────── */}
             <TouchableOpacity
               style={styles.forgotBtn}
               activeOpacity={0.7}
@@ -549,7 +523,6 @@ const DmsLoginScreen = ({ navigation }) => {
               <Text style={styles.forgotText}>Forgot password?</Text>
             </TouchableOpacity>
 
-            {/* ── SIGN IN BUTTON ────────────────────────────────── */}
             <TouchableOpacity
               style={[
                 styles.signInBtn,

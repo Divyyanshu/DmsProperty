@@ -23,7 +23,6 @@ function LogoIcon({ size = 72 }) {
         { width: size, height: size, borderRadius: size * 0.24 },
       ]}
     >
-      {/* Three horizontal "lines" representing a document/data icon */}
       <View style={styles.iconLine} />
       <View style={[styles.iconLine, { width: '60%' }]} />
       <View style={[styles.iconLine, { width: '75%' }]} />
@@ -78,7 +77,6 @@ function Ring({ size, opacity, top, left, delay }) {
   );
 }
 
-/* ─── Main Component ─────────────────────────────────────────────────────── */
 export default function SplashScreen({ navigation }) {
   // Animation values
   const logoOpacity = useRef(new Animated.Value(0)).current;
@@ -151,7 +149,7 @@ export default function SplashScreen({ navigation }) {
     ]).start(async () => {
       const token = await AsyncStorage.getItem('token');
       if (token) {
-        navigation.replace('DashboardScreen'); // ← apna screen naam yahan lagao
+        navigation.replace('DashboardScreen');
       } else {
         navigation.replace('DmsLoginScreen');
       }
